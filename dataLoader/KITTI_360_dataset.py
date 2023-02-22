@@ -371,8 +371,11 @@ class SatGrdDatasetLocalize(Dataset):
 
         # =================== read satellite map ===================================
         SatMap_name = os.path.join(self.root, self.satmap_dir, drive_dir, image_no_next.lower())
-        with Image.open(SatMap_name, 'r') as SatMap:
-            sat_map = SatMap.convert('RGB')
+        try:
+            with Image.open(SatMap_name, 'r') as SatMap:
+                sat_map = SatMap.convert('RGB')
+        except: 
+            print(f"Could find {SatMap_name} in the localization pipeline, but skip this for now")
 
         # =================== initialize some required variables ============================
         grd_left_imgs = torch.tensor([])

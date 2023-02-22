@@ -31,28 +31,47 @@ import argparse
 from utils import gps2distance
 import time
 
+from pathlib import Path
+
 ########################### ranking test ############################
 def localize(net_localize, args, save_path, best_rank_result, epoch):
     print("Runing localization pipeline")
-    LOCALIZE_FILE = ""
+    LOCALIZE_FILE = "/mnt/workspace/users/leekt/HighlyAccurate/localize/localize_results.txt"
+    if not os.path.exists(LOCALIZE_FILE):
+        print("Creating localize_file: ")
+        touching = Path(LOCALIZE_FILE)
+        touching.touch(exist_ok=True)
     net_localize.eval()
     dataloader = load_localize_data(mini_batch, args.shift_range_lat, args.shift_range_lon, args.rotation_range)
     
     start_time = time.time()
-    for i, data in enumerate(dataloader):
-        # If batch_size is not set to one, will return a list of tensor where the first dimension of the tensors are the batch_size
-        # print("len(data) = ", len(data)) # 7
-        # print("data[0].shape = ", data[0].shape) # satmap: torch.Size([B, 3, 512, 512])
-        # print("data[1].shape = ", data[1].shape) # left_camera_k: torch.Size([B, 3, 3])
-        # print("data[2].shape = ", data[2].shape) # groudn_left_img: torch.Size([B, 3, 256, 1024])
-        sat_map, left_camera_k, grd_left_imgs = [item.to(device) for item in data]
-        print("left_cam_k = ", left_camera_k)
-        
-        if args.direction == 'S2GP':
-            shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_left_imgs, mode='test')
-            # print("shifts_lat = ", shifts_lat, ", shifts_lon = ", shifts_lon, "theta = ", theta)
-        elif args.direction == 'G2SP':
-            shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_left_imgs, left_camera_k, mode='test')
+
+    # Write to the localize results file
+    with open(LOCALIZE_FILE, 'w') as f:
+
+        for i, data in enumerate(dataloader):
+            if i % 20 == 0:
+                print("i = ", i)
+            # If batch_size is not set to one, will return a list of tensor where the first dimension of the tensors are the batch_size
+            # print("len(data) = ", len(data)) # 7
+            # print("data[0].shape = ", data[0].shape) # satmap: torch.Size([B, 3, 512, 512])
+            # print("data[1].shape = ", data[1].shape) # left_camera_k: torch.Size([B, 3, 3])
+            # print("data[2].shape = ", data[2].shape) # groudn_left_img: torch.Size([B, 3, 256, 1024])
+            sat_map, left_camera_k, grd_left_imgs = [item.to(device) for item in data]
+            # print("left_cam_k = ", left_camera_k)
+            
+            if args.direction == 'S2GP':
+                shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_left_imgs, mode='test')
+                # print("shifts_lat = ", shifts_lat.item(), ", shifts_lon = ", shifts_lon.item(), "theta = ", theta.item())
+                content = f"{shifts_lat.item()} {shifts_lon.item()} {theta.item()}\n"
+                f.writelines(content)
+
+            elif args.direction == 'G2SP':
+                shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_left_imgs, left_camera_k, mode='test')
+
+
+
+
 
 
 def test1(net_test, args, save_path, best_rank_result, epoch):
