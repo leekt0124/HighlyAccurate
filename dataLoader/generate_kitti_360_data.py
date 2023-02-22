@@ -10,7 +10,7 @@ TRAIN_INTERVALS = [(0, 99), (5000, 5099)]
 TEST_FILE = "/mnt/workspace/users/leekt/HighlyAccurate/dataLoader/kitti_360_test.txt"
 # TEST_START = 100
 # TEST_END = 199
-TEST_INTERVALS = [(0, 999)]
+TEST_INTERVALS = [(0, 1999)]
 # TEST_INTERVALS = [(100, 199), (5100, 5199)]
 TEST_NOISE_SCALE = 1
 

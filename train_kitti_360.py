@@ -61,6 +61,7 @@ def localize(net_localize, args, save_path, best_rank_result, epoch):
             # print("left_cam_k = ", left_camera_k)
             
             if args.direction == 'S2GP':
+                # meters, meters, angle
                 shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_left_imgs, mode='test')
                 # print("shifts_lat = ", shifts_lat.item(), ", shifts_lon = ", shifts_lon.item(), "theta = ", theta.item())
                 content = f"{shifts_lat.item()} {shifts_lon.item()} {theta.item()}\n"

@@ -396,8 +396,10 @@ class SatGrdDatasetLocalize(Dataset):
                 grd_img_left = GrdImg.convert('RGB')
                 if self.grdimage_transform is not None:
                     grd_img_left = self.grdimage_transform(grd_img_left)
-
-            grd_left_imgs = torch.cat([grd_left_imgs, grd_img_left.unsqueeze(0)], dim=0)
+            
+            # print("type(grd_img_left) = ", type(grd_img_left.shape)
+            grd_left_imgs = grd_img_left
+            # grd_left_imgs = torch.cat([grd_left_imgs, grd_img_left.unsqueeze(0)], dim=0)
 
         sat_rot = sat_map.rotate(-heading / np.pi * 180)
         sat_align_cam = sat_rot.transform(sat_rot.size, Image.AFFINE,
@@ -432,11 +434,12 @@ class SatGrdDatasetLocalize(Dataset):
         # sat_map = TF.center_crop(sat_rand_shift_rand_rot, utils.SatMap_process_sidelength)
         # # sat_map = np.array(sat_map, dtype=np.float32)
 
-        # transform
+        # satmap transform for resizing 
         if self.satmap_transform is not None:
             sat_map = self.satmap_transform(sat_map)
-
-        return sat_map, left_camera_k, grd_left_imgs[0]
+        
+        # print(grd_left_imgs)
+        return sat_map, left_camera_k, grd_left_imgs
     
         # return sat_map, left_camera_k, grd_left_imgs[0], \
         #        torch.tensor(-gt_shift_x, dtype=torch.float32).reshape(1), \

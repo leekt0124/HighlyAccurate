@@ -64,7 +64,8 @@ test_logs = ['2017-08-04/Log1']
 #     list(range(2000, 2500)) + list(range(3500, 4000)),
 # ]
 
-test_logs_img_inds = [list(range(1000, 1010))]
+test_logs_img_inds = [list(range(10, 9000))]
+# test_logs_img_inds = [list(range(1000, 1010))]
 
 # For the Ford dataset coordinates:
 # x--> North, y --> east, z --> down
