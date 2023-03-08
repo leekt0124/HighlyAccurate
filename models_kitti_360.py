@@ -1295,13 +1295,10 @@ class LM_S2GP(nn.Module):
 
 
                 '''
-                    TODO: No need to project sat_feat to ground!
-                          Handle these! Or project both (sat and grd) to grd?                
-                    Goro's TODO:
-                    1. Fisheye intrinsics
-                    2. Transformer should produces "multiple level features"
-                    3. Should we project both Sat_features and bev_features (from grd images) to ground-view?
-                    4. If no, have to handle the LM-Optimization part codes
+                    TODO: 
+                    1. Setup transformer for satellite images
+                    2. Enable "multiple level features" for transformer
+ 
                 '''
 
                 # sat_feat_proj, sat_conf_proj, dfeat_dpose, sat_uv, mask = self.project_map_to_grd(

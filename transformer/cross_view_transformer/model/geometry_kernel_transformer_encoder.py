@@ -632,57 +632,7 @@ class GeometryKernelAttention(nn.Module):
 
         return self.cross_attn(query, key_flat, val_flat, mask=mask, skip=x if self.skip else None)
 
-import numpy as np
 
-def process_fisheye_image(image, fish_cam_dict):
-    ''' camera coordinate to image plane '''
-    '''
-
-    return : an image (tensor of shape (C, H, W)
-    '''
-    # points = points.T
-    # norm = np.linalg.norm(points, axis=1)
-
-    # x = points[:,0] / norm
-    # y = points[:,1] / norm
-    # z = points[:,2] / norm
-
-    # x /= z+fish_cam_dict['mirror_parameters']['xi']
-    # y /= z+fish_cam_dict['mirror_parameters']['xi']
-
-    # k1 = fish_cam_dict['distortion_parameters']['k1']
-    # k2 = fish_cam_dict['distortion_parameters']['k2']
-    # gamma1 = fish_cam_dict['projection_parameters']['gamma1']
-    # gamma2 = fish_cam_dict['projection_parameters']['gamma2']
-    # u0 = fish_cam_dict['projection_parameters']['u0']
-    # v0 = fish_cam_dict['projection_parameters']['v0']
-
-    # ro2 = x*x + y*y
-    # x *= 1 + k1*ro2 + k2*ro2*ro2
-    # y *= 1 + k1*ro2 + k2*ro2*ro2
-
-    # x = gamma1*x + u0
-    # y = gamma2*y + v0
-
-    # return x, y, norm * points[:,2] / np.abs(points[:,2])
-
-    return image
-    
-def preprocess_images(images, intrinsics_dict):
-
-    """
-    Preprocess images[2] and images[3]
-    so that we can multiply them with 3x3 intrinsic form
-
-    return: images (tensor of shape (4,C,H,W))    
-    
-    """
-
-    images_processed = torch.zeros_like(images) 
-    images_processed[0:1, :, :] = images[0:1, :, :]
-    images_processed[2, :, :] = process_fisheye_image(images[2,:,:], intrinsics_dict['fcam2'])
-    images_processed[3, :, :] = process_fisheye_image(images[3,:,:], intrinsics_dict['fcam3'])
-    return images_processed
 
 def get_fisheye_intrinsics(fish_cam_dict):
 
@@ -800,9 +750,6 @@ class GeometryKernelEncoder(nn.Module):
         # batch['intrincis']['fcam3']: dictionary
         """
 
-        # Preprocess points (images[2] and images[3[])
-
-        # images = preprocess_images(images, batch['intrinsics_dict'])
         # I should be (4, 4, 3, 3)
         I = setup_intrinsics(batch['intrinsics_dict'])
         I = I.to(batch['extrinsics'].device)
