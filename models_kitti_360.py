@@ -999,6 +999,18 @@ class LM_S2GP(nn.Module):
             dfeat_dpose: [3, B, C, H, W]
 
         Returns:
+            shift_u_new
+            shift_v_new
+            theta_new
+
+        Note:
+            grrd_conf: is used for calculating 'weight'
+            if args.use_wight:
+                weight = (grd_conf[:, None, :]).repeat(1, C, 1).reshape(B, -1)
+            This weight is later used for J' calculation
+            >> temp = J.transpose(1, 2) * weight.unsqueeze(dim=1)
+
+            sat_conf_proj: not used. Only itself.
 
         '''
         if self.args.rotation_range == 0:
@@ -1038,7 +1050,7 @@ class LM_S2GP(nn.Module):
         grd_feat_norm = torch.maximum(grd_feat_norm, 1e-6 * torch.ones_like(grd_feat_norm))
         grd_feat = grd_feat / grd_feat_norm[:, None]
 
-
+        # This is the error e (differences between the satellite and ground features) in eqn(5) of paper
         r = sat_feat_proj - grd_feat  # [B, D]
 
         if self.using_weight:

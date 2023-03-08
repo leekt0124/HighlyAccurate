@@ -22,6 +22,9 @@ RUN pip install wandb==0.12.11
 RUN pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0 --extra-index-url https://download.pytorch.org/whl/cu113
 RUN pip install torchtext==0.12.0
 
+# For fisheye cameras intrinsic handling 
+RUN pip install sympy
+
 # scipy, tensorboard
 # RUN pip install scipy
 # RUN pip install tensorboard

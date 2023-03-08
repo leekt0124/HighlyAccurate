@@ -508,6 +508,7 @@ class GeometryKernelAttention(nn.Module):
         fcam3_xi = intrinsics_dict["fcam3"]["mirror_parameters"]["xi"].item()
 
         # To handle the inverse of undistortion, it seems unavoidable to call the sympy function in a non-vectorized way
+        # Each 'idx' is a 'pixel' in the input camera image
         for idx in range(h * w):
             # Try scipy
             # fcam2
@@ -528,7 +529,7 @@ class GeometryKernelAttention(nn.Module):
             y_prime = cam[:, 3, 1, idx].item()
             def func(x):
                 r2 = x[0] ** 2 + x[1] ** 2
-                return [x[0] * (1 + fcam2_k1 * r2 + fcam2_k2 * r2 ** 2) - x_prime, x[1] * (1 + fcam2_k1 * r2 + fcam2_k2 * r2 ** 2) - y_prime]
+                return [x[0] * (1 + fcam3_k1 * r2 + fcam2_k2 * r2 ** 2) - x_prime, x[1] * (1 + fcam3_k1 * r2 + fcam3_k2 * r2 ** 2) - y_prime]
             
             root = fsolve(func, [x_prime, y_prime])
             # print("prime = ", x_prime, " ", y_prime)
