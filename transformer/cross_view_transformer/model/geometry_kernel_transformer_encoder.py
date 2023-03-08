@@ -509,7 +509,6 @@ class GeometryKernelAttention(nn.Module):
         # To handle the inverse of undistortion, it seems unavoidable to call the sympy function in a non-vectorized way
         # Each 'idx' is a 'pixel' in the input camera image
         for idx in range(h * w):
-            # Try scipy
             # fcam2
             x_prime = cam[:, 2, 0, idx].item()
             y_prime = cam[:, 2, 1, idx].item()
@@ -518,8 +517,7 @@ class GeometryKernelAttention(nn.Module):
                 return [x[0] * (1 + fcam2_k1 * r2 + fcam2_k2 * r2 ** 2) - x_prime, x[1] * (1 + fcam2_k1 * r2 + fcam2_k2 * r2 ** 2) - y_prime]
             
             root = fsolve(func, [x_prime, y_prime])
-            # print("prime = ", x_prime, " ", y_prime)
-            # print("root = ", root)
+
             cam[:, 2, 0, idx] = root[0]
             cam[:, 2, 1, idx] = root[1]
 
@@ -531,45 +529,12 @@ class GeometryKernelAttention(nn.Module):
                 return [x[0] * (1 + fcam3_k1 * r2 + fcam3_k2 * r2 ** 2) - x_prime, x[1] * (1 + fcam3_k1 * r2 + fcam3_k2 * r2 ** 2) - y_prime]
             
             root = fsolve(func, [x_prime, y_prime])
-            # print("prime = ", x_prime, " ", y_prime)
-            # print("root = ", root)
             cam[:, 3, 0, idx] = root[0]
             cam[:, 3, 1, idx] = root[1]
 
-            # x of fcam2 in idx's pixel
-            # x, y = sympy.symbols('x, y')
-            # r2 = x ** 2 + y ** 2
-            # y2 = y ** 2
-            # x_prime = cam[:, 2, 0, idx].item()
-            # y_prime = cam[:, 2, 1, idx].item()
-            # eq1 = sympy.Eq(x * (1 + fcam2_k1 * r2 + fcam2_k2 * r2 ** 2), x_prime)
-            # eq2 = sympy.Eq(y * (1 + fcam2_k1 * r2 + fcam2_k2 * r2 ** 2), y_prime)
-            # eq3 = sympy.Eq(x + y2, 2)
-            # eq4 = sympy.Eq(x - y, 1)
-            # print("x = ", x)
-            # print("y = ", y)
-            # print("r2 = ", r2)
-            # print("x_prime = ", x_prime)
-            # print("y_prime = ", y_prime)
-            # print("fcam2_k1 = ", fcam2_k1)
-            # print("fcam2_k2 = ", fcam2_k2)
-            # print("solving... ", sympy.solve((eq3, eq4), (x, y)))
-            # print("solving... ", sympy.nonlinsolve([eq1, eq2], [x, y]))
-            # # print("solving... ", sympy.solve((eq1, eq2), (x, y)))
-            # ans = sympy.solve((eq1, eq2), (x, y))
-            # print("ans = ", ans)
-
-        print("1: ", cam[0, 2, :, 0])
         cam[:, 2, 0: 2, :] *= cam[:, 2, 2, :] + fcam2_xi
         cam[:, 3, 0: 2, :] *= cam[:, 3, 2, :] + fcam3_xi
-        print("2: ", cam[0, 2, :, 0])
-        print("shape1 = ", cam[:, 2:, :, :].shape)
-        print("shape2 = ", cam[:, 2:, 2:, :].shape)
         cam[:, 2:, :, :] /= cam[:, 2:, 2:, :]
-
-        print("3: ", cam[0, 2, :, 0])
-
-        
 
         cam = F.pad(cam, (0, 0, 0, 1, 0, 0, 0, 0), value=1)
         # b n 4 (h w)
