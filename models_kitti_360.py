@@ -1246,7 +1246,11 @@ class LM_S2GP(nn.Module):
         grd_feat_list = []
         for _ in range(len(grd_feat_dict)):
             grd_feat_list.append(grd_feat_dict['bev'])
-        grd_conf_list = torch.zeros_like(sat_conf_list[0], device=sat_map.device)
+        
+        # TODO: Modify grd_conf_list
+        scale = 0.1
+        grd_conf_list = torch.ones_like(sat_conf_list[0], device=sat_map.device)*scale
+
 
         '''
             grd_feat_dict: a dictionary of feature given different level
@@ -1303,7 +1307,9 @@ class LM_S2GP(nn.Module):
                 # sat_feat_proj, sat_conf_proj, dfeat_dpose, sat_uv, mask = self.project_map_to_grd(
                 #     sat_feat, sat_conf, shift_u, shift_v, heading, level, gt_depth=gt_depth)
                 sat_feat_proj = sat_feat      
-                sat_uv        = torch.zeros([1, 1, 1, 2], device=sat_map.device)  
+
+                small_const = 0.1
+                sat_uv        = torch.ones([1, 1, 1, 2], device=sat_map.device) * small_const
                 # [B, C, H, W], [B, 1, H, W], [3, B, C, H, W], [B, H, W, 2]
 
                 # grd_feat = grd_feat * mask[:, None, :, :]
