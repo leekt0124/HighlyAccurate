@@ -7,7 +7,6 @@ from torchvision.models.resnet import Bottleneck
 from typing import List
 from IPython import embed
 
-import sympy
 from scipy.optimize import fsolve
 
 import time
@@ -529,7 +528,7 @@ class GeometryKernelAttention(nn.Module):
             y_prime = cam[:, 3, 1, idx].item()
             def func(x):
                 r2 = x[0] ** 2 + x[1] ** 2
-                return [x[0] * (1 + fcam3_k1 * r2 + fcam2_k2 * r2 ** 2) - x_prime, x[1] * (1 + fcam3_k1 * r2 + fcam3_k2 * r2 ** 2) - y_prime]
+                return [x[0] * (1 + fcam3_k1 * r2 + fcam3_k2 * r2 ** 2) - x_prime, x[1] * (1 + fcam3_k1 * r2 + fcam3_k2 * r2 ** 2) - y_prime]
             
             root = fsolve(func, [x_prime, y_prime])
             # print("prime = ", x_prime, " ", y_prime)
@@ -561,8 +560,8 @@ class GeometryKernelAttention(nn.Module):
             # print("ans = ", ans)
 
         print("1: ", cam[0, 2, :, 0])
-        cam[:, 2:, 0: 2, :] *= cam[:, 2:, 2, :] + fcam2_xi
-        # cam[:, 2:, 1, :] *= cam[:, 2:, 2, :] + fcam3_xi
+        cam[:, 2, 0: 2, :] *= cam[:, 2, 2, :] + fcam2_xi
+        cam[:, 3, 0: 2, :] *= cam[:, 3, 2, :] + fcam3_xi
         print("2: ", cam[0, 2, :, 0])
         print("shape1 = ", cam[:, 2:, :, :].shape)
         print("shape2 = ", cam[:, 2:, 2:, :].shape)
