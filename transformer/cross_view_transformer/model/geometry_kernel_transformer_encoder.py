@@ -434,6 +434,9 @@ class GeometryKernelAttention(nn.Module):
         self.cross_attn = KernelAttention(dim, heads, dim_head, qkv_bias)
         self.skip = skip
 
+        # self.cam_cache = {(16, 16): torch.zeros(16, 16), (256, 256): torch.zeros(256, 256)}
+        self.cam_cache = {}
+
     def forward(
         self,
         x: torch.FloatTensor,
@@ -474,6 +477,8 @@ class GeometryKernelAttention(nn.Module):
         '''                
         start = time.time()
 
+        # print("self.cam_cache = ", self.cam_cache)
+
 
         b, n, _, _, _ = feature.shape
 
@@ -490,53 +495,61 @@ class GeometryKernelAttention(nn.Module):
 
         # 1 1 3 (h w)
         pixel_flat = rearrange(pixel, '... h w -> ... (h w)')
-        # b n 3 (h w)
-        cam = I_inv @ pixel_flat
 
-        # Distortion and mirror for fisheye
-        # given (x', y') -> get (x, y)
-        # x' = x * (1 + k1 * (x ** 2 + y ** 2) + k2 * (x ** 2 + y ** 2) ** 2)
-        # y' = y * (1 + k1 * (x ** 2 + y ** 2) + k2 * (x ** 2 + y ** 2) ** 2)
+        cam = None
+        if (h, w) in self.cam_cache:
+            cam = self.cam_cache[(h, w)]
 
-        fcam2_k1 = intrinsics_dict["fcam2"]["distortion_parameters"]["k1"].item()
-        fcam2_k2 = intrinsics_dict["fcam2"]["distortion_parameters"]["k2"].item()
-        fcam2_xi = intrinsics_dict["fcam2"]["mirror_parameters"]["xi"].item()
+        else:
+            # b n 3 (h w)
+            cam = I_inv @ pixel_flat
 
-        fcam3_k1 = intrinsics_dict["fcam3"]["distortion_parameters"]["k1"].item()
-        fcam3_k2 = intrinsics_dict["fcam3"]["distortion_parameters"]["k2"].item()
-        fcam3_xi = intrinsics_dict["fcam3"]["mirror_parameters"]["xi"].item()
+            # Distortion and mirror for fisheye
+            # given (x', y') -> get (x, y)
+            # x' = x * (1 + k1 * (x ** 2 + y ** 2) + k2 * (x ** 2 + y ** 2) ** 2)
+            # y' = y * (1 + k1 * (x ** 2 + y ** 2) + k2 * (x ** 2 + y ** 2) ** 2)
 
-        # To handle the inverse of undistortion, it seems unavoidable to call the sympy function in a non-vectorized way
-        # Each 'idx' is a 'pixel' in the input camera image
-        for idx in range(h * w):
-            # fcam2
-            x_prime = cam[:, 2, 0, idx].item()
-            y_prime = cam[:, 2, 1, idx].item()
-            def func(x):
-                r2 = x[0] ** 2 + x[1] ** 2
-                return [x[0] * (1 + fcam2_k1 * r2 + fcam2_k2 * r2 ** 2) - x_prime, x[1] * (1 + fcam2_k1 * r2 + fcam2_k2 * r2 ** 2) - y_prime]
-            
-            root = fsolve(func, [x_prime, y_prime])
+            fcam2_k1 = intrinsics_dict["fcam2"]["distortion_parameters"]["k1"].item()
+            fcam2_k2 = intrinsics_dict["fcam2"]["distortion_parameters"]["k2"].item()
+            fcam2_xi = intrinsics_dict["fcam2"]["mirror_parameters"]["xi"].item()
 
-            cam[:, 2, 0, idx] = root[0]
-            cam[:, 2, 1, idx] = root[1]
+            fcam3_k1 = intrinsics_dict["fcam3"]["distortion_parameters"]["k1"].item()
+            fcam3_k2 = intrinsics_dict["fcam3"]["distortion_parameters"]["k2"].item()
+            fcam3_xi = intrinsics_dict["fcam3"]["mirror_parameters"]["xi"].item()
 
-            # fcam3
-            x_prime = cam[:, 3, 0, idx].item()
-            y_prime = cam[:, 3, 1, idx].item()
-            def func(x):
-                r2 = x[0] ** 2 + x[1] ** 2
-                return [x[0] * (1 + fcam3_k1 * r2 + fcam3_k2 * r2 ** 2) - x_prime, x[1] * (1 + fcam3_k1 * r2 + fcam3_k2 * r2 ** 2) - y_prime]
-            
-            root = fsolve(func, [x_prime, y_prime])
-            cam[:, 3, 0, idx] = root[0]
-            cam[:, 3, 1, idx] = root[1]
+            # To handle the inverse of undistortion, it seems unavoidable to call the sympy function in a non-vectorized way
+            # Each 'idx' is a 'pixel' in the input camera image
+            for idx in range(h * w):
+                # fcam2
+                x_prime = cam[:, 2, 0, idx].item()
+                y_prime = cam[:, 2, 1, idx].item()
+                def func(x):
+                    r2 = x[0] ** 2 + x[1] ** 2
+                    return [x[0] * (1 + fcam2_k1 * r2 + fcam2_k2 * r2 ** 2) - x_prime, x[1] * (1 + fcam2_k1 * r2 + fcam2_k2 * r2 ** 2) - y_prime]
+                
+                root = fsolve(func, [x_prime, y_prime])
 
-        cam[:, 2, 0: 2, :] *= cam[:, 2, 2, :] + fcam2_xi
-        cam[:, 3, 0: 2, :] *= cam[:, 3, 2, :] + fcam3_xi
-        cam[:, 2:, :, :] /= cam[:, 2:, 2:, :]
+                cam[:, 2, 0, idx] = root[0]
+                cam[:, 2, 1, idx] = root[1]
 
-        cam = F.pad(cam, (0, 0, 0, 1, 0, 0, 0, 0), value=1)
+                # fcam3
+                x_prime = cam[:, 3, 0, idx].item()
+                y_prime = cam[:, 3, 1, idx].item()
+                def func(x):
+                    r2 = x[0] ** 2 + x[1] ** 2
+                    return [x[0] * (1 + fcam3_k1 * r2 + fcam3_k2 * r2 ** 2) - x_prime, x[1] * (1 + fcam3_k1 * r2 + fcam3_k2 * r2 ** 2) - y_prime]
+                
+                root = fsolve(func, [x_prime, y_prime])
+                cam[:, 3, 0, idx] = root[0]
+                cam[:, 3, 1, idx] = root[1]
+
+            cam[:, 2, 0: 2, :] *= cam[:, 2, 2, :] + fcam2_xi
+            cam[:, 3, 0: 2, :] *= cam[:, 3, 2, :] + fcam3_xi
+            cam[:, 2:, :, :] /= cam[:, 2:, 2:, :]
+
+            cam = F.pad(cam, (0, 0, 0, 1, 0, 0, 0, 0), value=1)
+            self.cam_cache[(h, w)] = cam
+
         # b n 4 (h w)
         d = E_inv @ cam
         # (b n) 4 h w
@@ -663,6 +676,11 @@ class GeometryKernelEncoder(nn.Module):
 
             cva = GeometryKernelAttention(
                 feat_height, feat_width, feat_dim, dim, **cross_view)
+            
+            # print("Model's state_dict:")
+            # for param_tensor in cva.state_dict():
+            #     print(param_tensor, "\t", cva.state_dict()[param_tensor].size())
+
             cross_views.append(cva)
 
             layer = nn.Sequential(*[ResNetBottleNeck(dim)
@@ -696,10 +714,10 @@ class GeometryKernelEncoder(nn.Module):
         # b n c h w
         images = batch['image'].flatten(0, 1)
 
-        print("GKT Encoder: ")
-        print(f'    Grd Img shape: {batch["image"].shape}' )
-        print(f'    Intrinsics_dict len: {len(batch["intrinsics_dict"])}' )
-        print(f'    Extrinsics shape: {batch["extrinsics"].shape}' )
+        # print("GKT Encoder: ")
+        # print(f'    Grd Img shape: {batch["image"].shape}' )
+        # print(f'    Intrinsics_dict len: {len(batch["intrinsics_dict"])}' )
+        # print(f'    Extrinsics shape: {batch["extrinsics"].shape}' )
         """
         => TODO: Make shape be:
         Img: b, n, c, h, w => 1, 4, 3, 256, 1024
