@@ -78,6 +78,13 @@ class EfficientNetExtractor(torch.nn.Module):
         # Pass a dummy tensor to precompute intermediate shapes
         dummy = torch.rand(1, 3, image_height, image_width)
         output_shapes = [x.shape for x in self(dummy)]
+        print(f'output_shapes: {output_shapes[0]}, {output_shapes[1]}')
+
+        # TODO: 
+        # sat net: torch.Size([1, 32, 32, 32]), torch.Size([1, 112, 8, 8])
+        # grd net: torch.Size([1, 32, 64, 256]), torch.Size([1, 112, 16, 64])
+
+        # TODO: For satellite net, the output_shapes should be 128, 128
 
         self.output_shapes = output_shapes
 

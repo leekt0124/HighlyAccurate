@@ -1,6 +1,7 @@
 defaults:
   - _self_
   - model: gkt 
+  - satellite_model: gkt
   - data: kitti_360
   - visualization: null
 

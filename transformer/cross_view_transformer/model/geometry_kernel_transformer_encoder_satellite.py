@@ -391,10 +391,16 @@ class GeometryKernelAttention(nn.Module):
         super().__init__()
 
         # 1 1 3 h w
+
         image_plane = generate_grid(feat_height, feat_width)[None]
         image_plane[:, :, 0] *= image_width
         image_plane[:, :, 1] *= image_height
 
+        # TODO: How to make the shape of image_plane to be (128, 128) ? => feat_height, feat_width
+        # print(f'image_width {image_width}, image_height {image_height}') #image_width 128, image_height 128
+        print(f'image_plane.shape {image_plane.shape}')  # [1, 3, 64, 256])
+        print(f'After [None] image_plane.shape {image_plane.shape}')  # [1, 1, 3, 64, 256])
+        print(f'image_plane.shape {image_plane.shape}') # [1, 1, 3, 64, 256]); [1, 1, 3, 16, 64]
         self.register_buffer('image_plane', image_plane, persistent=False)
 
         if sampling_type == "unfold":
@@ -485,6 +491,7 @@ class GeometryKernelAttention(nn.Module):
         # b n 3 h w
         pixel = self.image_plane
         _, _, _, h, w = pixel.shape
+        print(f'h, w {h}, {w}') # h, w 64, 256
 
         # b n 4 1
         c = E_inv[..., -1:]
@@ -496,70 +503,23 @@ class GeometryKernelAttention(nn.Module):
         # 1 1 3 (h w)
         pixel_flat = rearrange(pixel, '... h w -> ... (h w)')
 
-        print(f'I_inv.shape {I_inv.shape}')           # (1, 4, 3, 3)
+        # b n 3 (h w)
+        print(f'I_inv.shape {I_inv.shape}')           # (1, 1, 3, 3)
         print(f'pixel_flat.shape {pixel_flat.shape}') # (1, 1, 3, 16384)
 
+        cam = I_inv @ pixel_flat
+        cam = F.pad(cam, (0, 0, 0, 1, 0, 0, 0, 0), value=1)
+        print(f'cam.shape {cam.shape}')
 
-        cam = None
-        if (h, w) in self.cam_cache:
-            cam = self.cam_cache[(h, w)]
-
-        else:
-            # b n 3 (h w)
-            
-            cam = I_inv @ pixel_flat
-            print(f'else: cam.shape {cam.shape}')
-            # Distortion and mirror for fisheye
-            # given (x', y') -> get (x, y)
-            # x' = x * (1 + k1 * (x ** 2 + y ** 2) + k2 * (x ** 2 + y ** 2) ** 2)
-            # y' = y * (1 + k1 * (x ** 2 + y ** 2) + k2 * (x ** 2 + y ** 2) ** 2)
-
-            fcam2_k1 = intrinsics_dict["fcam2"]["distortion_parameters"]["k1"].item()
-            fcam2_k2 = intrinsics_dict["fcam2"]["distortion_parameters"]["k2"].item()
-            fcam2_xi = intrinsics_dict["fcam2"]["mirror_parameters"]["xi"].item()
-
-            fcam3_k1 = intrinsics_dict["fcam3"]["distortion_parameters"]["k1"].item()
-            fcam3_k2 = intrinsics_dict["fcam3"]["distortion_parameters"]["k2"].item()
-            fcam3_xi = intrinsics_dict["fcam3"]["mirror_parameters"]["xi"].item()
-
-            # To handle the inverse of undistortion, it seems unavoidable to call the sympy function in a non-vectorized way
-            # Each 'idx' is a 'pixel' in the input camera image
-            for idx in range(h * w):
-                # fcam2
-                x_prime = cam[:, 2, 0, idx].item()
-                y_prime = cam[:, 2, 1, idx].item()
-                def func(x):
-                    r2 = x[0] ** 2 + x[1] ** 2
-                    return [x[0] * (1 + fcam2_k1 * r2 + fcam2_k2 * r2 ** 2) - x_prime, x[1] * (1 + fcam2_k1 * r2 + fcam2_k2 * r2 ** 2) - y_prime]
-                
-                root = fsolve(func, [x_prime, y_prime])
-
-                cam[:, 2, 0, idx] = root[0]
-                cam[:, 2, 1, idx] = root[1]
-
-                # fcam3
-                x_prime = cam[:, 3, 0, idx].item()
-                y_prime = cam[:, 3, 1, idx].item()
-                def func(x):
-                    r2 = x[0] ** 2 + x[1] ** 2
-                    return [x[0] * (1 + fcam3_k1 * r2 + fcam3_k2 * r2 ** 2) - x_prime, x[1] * (1 + fcam3_k1 * r2 + fcam3_k2 * r2 ** 2) - y_prime]
-                
-                root = fsolve(func, [x_prime, y_prime])
-                cam[:, 3, 0, idx] = root[0]
-                cam[:, 3, 1, idx] = root[1]
-
-            cam[:, 2, 0: 2, :] *= cam[:, 2, 2, :] + fcam2_xi
-            cam[:, 3, 0: 2, :] *= cam[:, 3, 2, :] + fcam3_xi
-            cam[:, 2:, :, :] /= cam[:, 2:, 2:, :]
-
-            cam = F.pad(cam, (0, 0, 0, 1, 0, 0, 0, 0), value=1)
-            self.cam_cache[(h, w)] = cam
+        '''
+            h, w 64, 256
+            cam.shape torch.Size  ([1, 1, 3, 16384])
+            E_inv.shape torch.Size([1, 1, 4, 4])
+        '''
 
         # b n 4 (h w)
-        print(f'cam.shape {cam.shape}')     # cam.shape torch.Size  ([1, 4, 4, 16384])
-        print(f'E_inv.shape {E_inv.shape}') # E_inv.shape torch.Size([1, 4, 4, 4])
+        print(f'E_inv.shape {E_inv.shape}')
         d = E_inv @ cam
-        print(f'd.shape {d.shape}')
         # (b n) 4 h w
         d_flat = rearrange(d, 'b n d (h w) -> (b n) d h w', h=h, w=w)
 
@@ -581,6 +541,10 @@ class GeometryKernelAttention(nn.Module):
         # project local patches using sampling
         # concat feature and embeddings for sampling
         d_feature = feature_flat.shape[1]     
+
+        print(f'feature_flat.shape {feature_flat.shape}, d_flat.shape {d_flat.shape}')
+        # [1, 32, 128, 128])
+        # [[1, 4, 64, 256]]
 
         feature_embed = torch.cat([feature_flat, d_flat], dim=1)
         feature_embed, mask = self.sampling(
@@ -619,19 +583,6 @@ class GeometryKernelAttention(nn.Module):
         return self.cross_attn(query, key_flat, val_flat, mask=mask, skip=x if self.skip else None)
 
 
-
-def get_fisheye_intrinsics(fish_cam_dict):
-
-    g1 =  float(fish_cam_dict['projection_parameters']['gamma1'])
-    g2 =  float(fish_cam_dict['projection_parameters']['gamma2'])
-    fx = g1
-    fy = g2
-    cx =  float(fish_cam_dict['projection_parameters']['u0'])
-    cy =  float(fish_cam_dict['projection_parameters']['v0'])
-    print(f"        fx: {fx}  fy: {fy}  cx: {cx}  cy: {cy}")
-    return torch.tensor([[fx, 0,  cx], [0, fy, cy], [0, 0, 1]])
- 
-    return intrinsic 
 def setup_intrinsics(intrinsics_dict):
 
     """
@@ -643,10 +594,7 @@ def setup_intrinsics(intrinsics_dict):
     """
 
     I = torch.zeros(1, len(intrinsics_dict), 3, 3)
-    I[0, 0,:,:] = intrinsics_dict['pcam0']
-    I[0, 1,:,:] = intrinsics_dict['pcam1']
-    I[0, 2,:,:] = get_fisheye_intrinsics(intrinsics_dict['fcam2'])
-    I[0, 3,:,:] = get_fisheye_intrinsics(intrinsics_dict['fcam3'])
+    I[0, 0,:,:] = intrinsics_dict['sat_cam']
     return I
 
 class GeometryKernelEncoder(nn.Module):
@@ -681,7 +629,13 @@ class GeometryKernelEncoder(nn.Module):
         for feat_shape, num_layers in zip(self.backbone.output_shapes, middle):
             _, feat_dim, feat_height, feat_width = self.down(
                 torch.zeros(feat_shape)).shape
-
+            print(f'cross_view dict: {cross_view}')
+            '''
+            {'heads': 4, 'dim_head': 32, 'qkv_bias': True, 'skip': True, 
+            'no_image_features': False, 'image_height': 128, 'image_width': 128, 
+            'bev_z': 1.0, 'kernel_h': 7, 'kernel_w': 1, 'sampling_type': 'index', 
+            'use_kernel_conv': True, 'kernel_conv_h': 1, 'kernel_conv_w': 7}            
+            '''
             cva = GeometryKernelAttention(
                 feat_height, feat_width, feat_dim, dim, **cross_view)
             
@@ -703,46 +657,21 @@ class GeometryKernelEncoder(nn.Module):
 
         """
         Input batch: dict
-        {image: [B,C,A,A],
-         intrinsics_dict: a dictionary of 4 cameras intrinsics information
-            pcam0/pcam1: 3x3 tensors
-            fcam2/fcam3: dictionary of fisheye camera information
-         extrinsicx: B, N, 4, 4}
-
-        Input image 'batch':
-        :param left_camera_k: [B, 3, 3]
-        :param grd_img_left: [B, C, H, W]       
+            - image: [B,N, C,A,A] => the single satellite image
+            - intrinsics_dict: 'sat_cam' : torch.eye(3)
+            - extrinsicx: torch.eye(4) 
         """
         # b, n, _, _, _ = batch['image'].shape
         # B, C, H, W = batch['image'].shape # (1, 3, 256, 1024)
         # print(f'Shape of input ground-img: {B},{C},{H},{W}') # 1, 3, 512, 512
         # print("Representin B, C, H, W")
-        print(f'batch[image].shape {batch["image"].shape}')
-        
+
+        print(f'[Satellite_net] batch[image].shape {batch["image"].shape}')   #  [1, 1, 3, 512, 512])    
         b, n, _, _, _= batch['image'].shape
-        # b n c h w
+        # b, c, h, w (n: 1 only one satellite image)
         images = batch['image'].flatten(0, 1)
 
-        # print("GKT Encoder: ")
-        # print(f'    Grd Img shape: {batch["image"].shape}' )
-        # print(f'    Intrinsics_dict len: {len(batch["intrinsics_dict"])}' )
-        # print(f'    Extrinsics shape: {batch["extrinsics"].shape}' )
-        """
-        => TODO: Make shape be:
-        Img: b, n, c, h, w => 1, 4, 3, 256, 1024
-        Intrinsics_dict: a dictionary
-        Extrinsics: 1, 4, 4, 4
-        Then, (b,n) = 4 = b, n = 1, 4
-
-        # Process batch['intrinsic'] here:
-        # batch['intrincis']: a dict of 4 items
-        # batch['intrincis']['pcam0']: tensor of shape (3x3)
-        # batch['intrincis']['pcam1']: tensor of shape (3x3)
-        # batch['intrincis']['fcam2']: dictionary
-        # batch['intrincis']['fcam3']: dictionary
-        """
-
-        # I should be (4, 4, 3, 3)
+        # I should be (1, 1, 3, 3)
         I = setup_intrinsics(batch['intrinsics_dict'])
         I = I.to(batch['extrinsics'].device)
         # print(f'Intrinsics.shape : {I.shape}' )
@@ -751,9 +680,10 @@ class GeometryKernelEncoder(nn.Module):
         # I_inv = batch['intrinsics'].inverse()
         # b n 4 4
         E_inv = batch['extrinsics'].inverse()     
-
-
         
+
+        # print(f'I.shape {I.shape}') [1, 1, 3, 3]
+        # print(f'E.shape {batch["extrinsics"].shape}') [1, 1, 4, 4]
 
         features = [self.down(y) for y in self.backbone(self.norm(images))]
 

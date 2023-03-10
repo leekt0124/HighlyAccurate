@@ -619,19 +619,32 @@ class LM_G2SP(nn.Module):
 CONFIG_PATH = Path.cwd() / 'transformer/config'
 CONFIG_NAME = 'config.yaml'
 
-@hydra.main(config_path=CONFIG_PATH, config_name=CONFIG_NAME)
-# def setup_network(cfg: DictConfig):
-#     print(f'Setup Backbone Network: {cfg.model}')
-#     return instantiate(cfg.model)
-def setup_network(cfg):
-    print(f'Setup Backbone Network: {cfg.model}')
-    return instantiate(cfg.model)
+
+def setup_network(cfg, type):
+    if type=='satellite':
+        print(f'Setup Backbone Network for {type}: {cfg.satellite_model}')        
+        return instantiate(cfg.satellite_model)
+    else:
+        print(f'Setup Backbone Network for {type}: {cfg.model}')
+        return instantiate(cfg.model)
+
 
 @hydra.main(config_path=CONFIG_PATH, config_name=CONFIG_NAME)
-# TODO: add cfg these default settings to a yaml file
-# Or: add these config (from main to a config file)
+def setup_satellite_model_module(cfg) -> ModelModule:
+    print(f'setup_satellite_model_module')
+    backbone = setup_network(cfg, 'satellite')
+    loss_func = MultipleLoss(instantiate(cfg.loss))
+    metrics = MetricCollection({k: v for k, v in instantiate(cfg.metrics).items()})
+
+    model_module = ModelModule(backbone, loss_func, metrics,
+                               cfg.optimizer, cfg.scheduler,
+                               cfg=cfg)
+    return model_module
+
+@hydra.main(config_path=CONFIG_PATH, config_name=CONFIG_NAME)
 def setup_model_module(cfg) -> ModelModule:
-    backbone = setup_network(cfg)
+    print(f'setup_ground_images_model_module')
+    backbone = setup_network(cfg, 'ground')
     print(f'Setup loss_func: {cfg.loss}')
     loss_func = MultipleLoss(instantiate(cfg.loss))
     print(f'Setup Metrics: {cfg.metrics}')
@@ -662,7 +675,7 @@ class LM_S2GP(nn.Module):
         print("Debug msg")
         if args.highlyaccurate.use_transformer == True:
             print("For Ground-View images, Use Transformer as Feature Extractor!")
-            # self.SatFeatureNet = setup_model_module(args)
+            self.SatFeatureNet = setup_satellite_model_module(args)
             self.GrdFeatureNet = setup_model_module(args)
 
 
@@ -1219,8 +1232,18 @@ class LM_S2GP(nn.Module):
          extrinsicx: tensor of shape B, N, 4, 4}        
         """
 
-        sat_feat_list, sat_conf_list = self.SatFeatureNet(sat_map)
-        
+        intrinsics_dict_sat = {
+            'sat_cam': torch.eye(3)
+        }
+        # sat_map.unsqueeze(1) : add one dimension for dimension 1 (from left->right)
+        # Note: extrinsics should reshape to (1, 1, 4, 4)
+        satnet_input = {'image': sat_map.unsqueeze(1),  'intrinsics_dict': intrinsics_dict_sat, 'extrinsics': torch.eye(4, device=sat_map.device).reshape(1, 1, 4, 4)}
+        sat_feat_list= self.SatFeatureNet(satnet_input)
+
+        conf_tensor = torch.ones([1, 1, 64, 64])
+        scale = 0.1
+        sat_conf_list = torch.ones_like(conf_tensor, device=sat_map.device)*scale
+
         # for idx, _ in enumerate(sat_feat_list):
         #     print(f'level {idx}')
         #     print(f'sat_feat_list[{idx}].shape     {sat_feat_list[idx].shape}')
@@ -1253,7 +1276,7 @@ class LM_S2GP(nn.Module):
         
         # TODO: Modify grd_conf_list
         scale = 0.1
-        grd_conf_list = torch.ones_like(sat_conf_list[0], device=sat_map.device)*scale
+        grd_conf_list = torch.ones_like(conf_tensor, device=sat_map.device)*scale
 
 
         '''
@@ -1292,18 +1315,18 @@ class LM_S2GP(nn.Module):
                 sat_feat = sat_feat_list[level]
                 print("sat_feat.shape = ", sat_feat.shape)
                 sat_feat_last_two_dim = sat_feat[0, -3:, :, :]
-                print("sat_feat_last_two_dim = ", sat_feat_last_two_dim)
+                # print("sat_feat_last_two_dim = ", sat_feat_last_two_dim)
                 print("sat_feat_last_two_dim.shape = ", sat_feat_last_two_dim.shape)
                 save_image(sat_feat_last_two_dim, 'sat_feat.png')
                 # plt.plot(sat_feat_last_two_dim.detach().cpu().numpy())
                 # plt.savefig('sat_feat.png')
 
                 test_tensor = torch.randint_like(sat_feat_last_two_dim, low=0, high=255)
-                print("test_tensor = ", test_tensor)
+                # print("test_tensor = ", test_tensor)
                 save_image(test_tensor, "test_tensor.png")
 
                 test2_tensor = torch.rand_like(sat_feat_last_two_dim)
-                print("test2_tensor = ", test2_tensor)
+                # print("test2_tensor = ", test2_tensor)
                 save_image(test2_tensor, "test2_tensor.png")
 
 
