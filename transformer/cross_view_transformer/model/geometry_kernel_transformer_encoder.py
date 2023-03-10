@@ -98,7 +98,8 @@ class BEVEmbedding(nn.Module):
         super().__init__()
 
         # each decoder block upsamples the bev embedding by a factor of 2
-        h = bev_height // (2 ** len(decoder_blocks))
+        # The original paper uses (25 x 25) priors (bev 200/8 = 25)
+        h = bev_height // (2 ** len(decoder_blocks)) # => Since bev_height is now 64 => h is 64/8 = 8 now ! 
         w = bev_width // (2 ** len(decoder_blocks))
 
         # bev coordinates
@@ -670,9 +671,17 @@ class GeometryKernelEncoder(nn.Module):
         cross_views = list()
         layers = list()
 
+        '''
+        self.down(torch.zeros(feat_shape)).shape torch.Size([1, 32, 64, 256])
+        feat_dim 32 feat_height 64 feat_width 256
+        self.down(torch.zeros(feat_shape)).shape torch.Size([1, 112, 16, 64])
+        feat_dim 112 feat_height 16 feat_width 64
+        '''
         for feat_shape, num_layers in zip(self.backbone.output_shapes, middle):
+            print(f'self.down(torch.zeros(feat_shape)).shape {self.down(torch.zeros(feat_shape)).shape}')
             _, feat_dim, feat_height, feat_width = self.down(
                 torch.zeros(feat_shape)).shape
+            print(f' feat_dim {feat_dim} feat_height {feat_height} feat_width {feat_width}')
 
             cva = GeometryKernelAttention(
                 feat_height, feat_width, feat_dim, dim, **cross_view)

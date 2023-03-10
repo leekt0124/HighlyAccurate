@@ -76,8 +76,18 @@ class EfficientNetExtractor(torch.nn.Module):
         self.idx_pick = [layer_to_idx[l] for l in layer_names]
 
         # Pass a dummy tensor to precompute intermediate shapes
-        dummy = torch.rand(1, 3, image_height, image_width)
-        output_shapes = [x.shape for x in self(dummy)]
+        dummy = torch.rand(1, 3, image_height, image_width) # Random tensor of shape (1, 3, img_h, img_w)
+        print(f'dummy.type: {type(dummy)}')
+        print(f'dummy.shape {dummy.shape}')
+        '''
+            dummy.type: <class 'torch.Tensor'>
+            dummy.shape torch.Size([1, 3, 256, 1024])        
+    
+            self(dummy) length: 2 <class 'list' >
+            self(dummy)[0].shape torch.Size([1, 32, 64, 256])
+            self(dummy)[1].shape torch.Size([1, 112, 16, 64])
+        '''        
+        output_shapes = [x.shape for x in self(dummy)]  # a list of 2 tensors
 
         self.output_shapes = output_shapes
 
