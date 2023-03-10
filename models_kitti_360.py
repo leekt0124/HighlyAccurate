@@ -30,6 +30,10 @@ from pathlib import Path
 from transformer.losses import MultipleLoss
 from collections.abc import Callable
 from typing import Tuple, Dict, Optional
+
+import matplotlib.pyplot as plt
+from torchvision.utils import save_image
+
 # -----------------------------------
 
 class LM_G2SP(nn.Module):
@@ -1286,8 +1290,32 @@ class LM_S2GP(nn.Module):
             headings = []
             for level in range(len(sat_feat_list)):
                 sat_feat = sat_feat_list[level]
+                print("sat_feat.shape = ", sat_feat.shape)
+                sat_feat_last_two_dim = sat_feat[0, -3:, :, :]
+                print("sat_feat_last_two_dim = ", sat_feat_last_two_dim)
+                print("sat_feat_last_two_dim.shape = ", sat_feat_last_two_dim.shape)
+                save_image(sat_feat_last_two_dim, 'sat_feat.png')
+                # plt.plot(sat_feat_last_two_dim.detach().cpu().numpy())
+                # plt.savefig('sat_feat.png')
+
+                test_tensor = torch.randint_like(sat_feat_last_two_dim, low=0, high=255)
+                print("test_tensor = ", test_tensor)
+                save_image(test_tensor, "test_tensor.png")
+
+                test2_tensor = torch.rand_like(sat_feat_last_two_dim)
+                print("test2_tensor = ", test2_tensor)
+                save_image(test2_tensor, "test2_tensor.png")
+
+
+
                 sat_conf = sat_conf_list[level]
                 grd_feat = grd_feat_list[level]
+
+                print("grd_feat.shape = ", grd_feat.shape)
+                grd_feat_last_two_dim = grd_feat[0, -3:, :, :]
+                print("grd_feat_last_two_dim = ", grd_feat_last_two_dim)
+                save_image(grd_feat_last_two_dim, "grd_feat.png")
+
                 grd_conf = grd_conf_list[level]
 
                 grd_H, grd_W = grd_feat.shape[-2:]
