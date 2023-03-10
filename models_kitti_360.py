@@ -638,6 +638,21 @@ def setup_model_module(cfg) -> ModelModule:
                                cfg=cfg)
     return model_module
 
+@hydra.main(config_path=CONFIG_PATH, config_name=CONFIG_NAME)
+# TODO: add cfg these default settings to a yaml file
+# Or: add these config (from main to a config file)
+def setup_satellite_model_module(cfg) -> ModelModule:
+    backbone = setup_network(cfg)
+    loss_func = MultipleLoss(instantiate(cfg.loss))
+    metrics = MetricCollection({k: v for k, v in instantiate(cfg.metrics).items()})
+
+    # TODO: New a class in config for 'satellite_net' : 
+    # cfg.model.satellite_net:
+    # cfg.model.grd_net: NN for ground-view images
+    model_module = ModelModule(backbone, loss_func, metrics,
+                               cfg.optimizer, cfg.scheduler,
+                               cfg=cfg)
+    return model_module
 
 class LM_S2GP(nn.Module):
     def __init__(self, args):  # device='cuda:0',
@@ -658,7 +673,8 @@ class LM_S2GP(nn.Module):
         print("Debug msg")
         if args.highlyaccurate.use_transformer == True:
             print("For Ground-View images, Use Transformer as Feature Extractor!")
-            # self.SatFeatureNet = setup_model_module(args)
+            # TODO: Uncomment it after setting up a new config
+            # self.SatFeatureNet = setup_satellite_model_module(args)
             self.GrdFeatureNet = setup_model_module(args)
 
 
