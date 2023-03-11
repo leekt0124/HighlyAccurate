@@ -1237,8 +1237,12 @@ class LM_S2GP(nn.Module):
         }
         # sat_map.unsqueeze(1) : add one dimension for dimension 1 (from left->right)
         # Note: extrinsics should reshape to (1, 1, 4, 4)
+        # TODO: What should be intrinsics and extrinsics
         satnet_input = {'image': sat_map.unsqueeze(1),  'intrinsics_dict': intrinsics_dict_sat, 'extrinsics': torch.eye(4, device=sat_map.device).reshape(1, 1, 4, 4)}
-        sat_feat_list= self.SatFeatureNet(satnet_input)
+        sat_feat_dict= self.SatFeatureNet(satnet_input)
+        sat_feat_list = []
+        for _ in range(len(sat_feat_dict)):
+            sat_feat_list.append(sat_feat_dict['bev'])
 
         conf_tensor = torch.ones([1, 1, 64, 64])
         scale = 0.1
@@ -1313,44 +1317,29 @@ class LM_S2GP(nn.Module):
             headings = []
             for level in range(len(sat_feat_list)):
                 sat_feat = sat_feat_list[level]
-                print("sat_feat.shape = ", sat_feat.shape)
+                # print("sat_feat.shape = ", sat_feat.shape) # sat_feat.shape =  torch.Size([1, 64, 64, 64])
                 sat_feat_last_two_dim = sat_feat[0, -3:, :, :]
-                # print("sat_feat_last_two_dim = ", sat_feat_last_two_dim)
-                print("sat_feat_last_two_dim.shape = ", sat_feat_last_two_dim.shape)
                 save_image(sat_feat_last_two_dim, 'sat_feat.png')
-                # plt.plot(sat_feat_last_two_dim.detach().cpu().numpy())
-                # plt.savefig('sat_feat.png')
 
                 test_tensor = torch.randint_like(sat_feat_last_two_dim, low=0, high=255)
-                # print("test_tensor = ", test_tensor)
                 save_image(test_tensor, "test_tensor.png")
 
                 test2_tensor = torch.rand_like(sat_feat_last_two_dim)
-                # print("test2_tensor = ", test2_tensor)
                 save_image(test2_tensor, "test2_tensor.png")
-
-
 
                 sat_conf = sat_conf_list[level]
                 grd_feat = grd_feat_list[level]
 
-                print("grd_feat.shape = ", grd_feat.shape)
+                # print("grd_feat.shape = ", grd_feat.shape) # grd_feat.shape =  torch.Size([1, 64, 64, 64])
+
                 grd_feat_last_two_dim = grd_feat[0, -3:, :, :]
-                print("grd_feat_last_two_dim = ", grd_feat_last_two_dim)
+                # print("grd_feat_last_two_dim = ", grd_feat_last_two_dim)
                 save_image(grd_feat_last_two_dim, "grd_feat.png")
 
                 grd_conf = grd_conf_list[level]
 
                 grd_H, grd_W = grd_feat.shape[-2:]
 
-
-
-                '''
-                    TODO: 
-                    1. Setup transformer for satellite images
-                    2. Enable "multiple level features" for transformer
- 
-                '''
 
                 # sat_feat_proj, sat_conf_proj, dfeat_dpose, sat_uv, mask = self.project_map_to_grd(
                 #     sat_feat, sat_conf, shift_u, shift_v, heading, level, gt_depth=gt_depth)

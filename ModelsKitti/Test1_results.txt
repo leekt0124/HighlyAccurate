@@ -1,0 +1,462 @@
+====================================
+       EPOCH: 0
+Time per image (second): 0.25037753343582153
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 1
+Time per image (second): 0.261127142906189
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 2
+Time per image (second): 0.5094668567180634
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 0
+Time per image (second): 0.608789027929306
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 3
+Time per image (second): 0.6081396496295929
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 1
+Time per image (second): 0.6111612164974213
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 4
+Time per image (second): 0.6136347472667694
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 2
+Time per image (second): 0.24953681945800782
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 3
+Time per image (second): 0.24447428464889526
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 4
+Time per image (second): 0.24397672295570375
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 0
+Time per image (second): 3.4614749789237975
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 1
+Time per image (second): 3.458993581533432
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 2
+Time per image (second): 3.4673190295696257
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 3
+Time per image (second): 3.5206478202342986
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 4
+Time per image (second): 3.4336012136936187
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 0
+Time per image (second): 1.6102420115470886
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 1
+Time per image (second): 1.6685505521297455
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 2
+Time per image (second): 1.5413009226322174
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 3
+Time per image (second): 1.5655733585357665
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 4
+Time per image (second): 1.5597987866401672
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================
+====================================
+       EPOCH: 0
+Time per image (second): 1.848917783498764
+distance within 1 meters (pred, init): 0.5 0.5
+distance within 3 meters (pred, init): 2.0 2.0
+distance within 5 meters (pred, init): 4.0 4.0
+------------------------
+lateral      within 1 meters (pred, init): 6.5 6.5
+longitudinal within 1 meters (pred, init): 2.5 2.5
+lateral      within 3 meters (pred, init): 13.0 13.0
+longitudinal within 3 meters (pred, init): 12.0 12.0
+lateral      within 5 meters (pred, init): 22.5 22.5
+longitudinal within 5 meters (pred, init): 21.0 21.0
+------------------------
+angle within 1 degrees (pred, init): 12.5 12.5
+angle within 3 degrees (pred, init): 37.0 37.0
+angle within 5 degrees (pred, init): 56.99999999999999 56.99999999999999
+------------------------
+lat within 1 & angle within 1 (pred, init): 0.5 0.5
+lat within 3 & angle within 3 (pred, init): 6.0 6.0
+lat within 5 & angle within 5 (pred, init): 13.5 13.5
+====================================

@@ -73,18 +73,17 @@ class EfficientNetExtractor(torch.nn.Module):
 
         self.layers = nn.Sequential(*blocks)
         self.layer_names = layer_names
-        self.idx_pick = [layer_to_idx[l] for l in layer_names]
+        self.idx_pick = [layer_to_idx[l] for l in layer_names] # idx 1, 3
 
         # Pass a dummy tensor to precompute intermediate shapes
         dummy = torch.rand(1, 3, image_height, image_width)
-        output_shapes = [x.shape for x in self(dummy)]
-        print(f'output_shapes: {output_shapes[0]}, {output_shapes[1]}')
+        output_shapes = [x.shape for x in self(dummy)] # [result[1].shape, result[3].shape]
+        print(f'output_shapes: {output_shapes[0]}, {output_shapes[1]}') 
+        #
+        # 
 
-        # TODO: 
-        # sat net: torch.Size([1, 32, 32, 32]), torch.Size([1, 112, 8, 8])
-        # grd net: torch.Size([1, 32, 64, 256]), torch.Size([1, 112, 16, 64])
-
-        # TODO: For satellite net, the output_shapes should be 128, 128
+        # Note: in gkt.yaml, backbone.image.h/.w should set to be input image.h/.w !
+        # Satellite image: 512,512 / grd-images: 256,1024
 
         self.output_shapes = output_shapes
 
@@ -102,7 +101,7 @@ class EfficientNetExtractor(torch.nn.Module):
 
             result.append(x)
 
-        return [result[i] for i in self.idx_pick]
+        return [result[i] for i in self.idx_pick] # return [result[1], result[3]]
 
 
 class SequentialWithArgs(nn.Sequential):

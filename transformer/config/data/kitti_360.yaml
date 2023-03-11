@@ -46,3 +46,8 @@ image:
   h: 256
   w: 1024
   top_crop: 46
+
+
+satellite_image:
+  h: 512
+  w: 512

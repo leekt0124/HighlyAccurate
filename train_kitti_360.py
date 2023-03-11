@@ -604,7 +604,7 @@ def main(cfg):
     save_path = getSavePath(cfg.highlyaccurate)
     print(f'save_path: {save_path}')
 
-    net = eval('LM_' + cfg.highlyaccurate.direction)(cfg)
+    net = eval('LM_' + cfg.highlyaccurate.direction)(cfg) # class LM_S2GP
 
     ### cudaargs.epochs, args.debug)
     net.to(device)

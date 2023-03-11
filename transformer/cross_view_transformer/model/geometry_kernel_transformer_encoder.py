@@ -496,10 +496,6 @@ class GeometryKernelAttention(nn.Module):
         # 1 1 3 (h w)
         pixel_flat = rearrange(pixel, '... h w -> ... (h w)')
 
-        print(f'I_inv.shape {I_inv.shape}')           # (1, 4, 3, 3)
-        print(f'pixel_flat.shape {pixel_flat.shape}') # (1, 1, 3, 16384)
-
-
         cam = None
         if (h, w) in self.cam_cache:
             cam = self.cam_cache[(h, w)]
@@ -508,7 +504,6 @@ class GeometryKernelAttention(nn.Module):
             # b n 3 (h w)
             
             cam = I_inv @ pixel_flat
-            print(f'else: cam.shape {cam.shape}')
             # Distortion and mirror for fisheye
             # given (x', y') -> get (x, y)
             # x' = x * (1 + k1 * (x ** 2 + y ** 2) + k2 * (x ** 2 + y ** 2) ** 2)
@@ -556,10 +551,7 @@ class GeometryKernelAttention(nn.Module):
             self.cam_cache[(h, w)] = cam
 
         # b n 4 (h w)
-        print(f'cam.shape {cam.shape}')     # cam.shape torch.Size  ([1, 4, 4, 16384])
-        print(f'E_inv.shape {E_inv.shape}') # E_inv.shape torch.Size([1, 4, 4, 4])
         d = E_inv @ cam
-        print(f'd.shape {d.shape}')
         # (b n) 4 h w
         d_flat = rearrange(d, 'b n d (h w) -> (b n) d h w', h=h, w=w)
 
@@ -628,7 +620,7 @@ def get_fisheye_intrinsics(fish_cam_dict):
     fy = g2
     cx =  float(fish_cam_dict['projection_parameters']['u0'])
     cy =  float(fish_cam_dict['projection_parameters']['v0'])
-    print(f"        fx: {fx}  fy: {fy}  cx: {cx}  cy: {cy}")
+    # print(f"        fx: {fx}  fy: {fy}  cx: {cx}  cy: {cy}")
     return torch.tensor([[fx, 0,  cx], [0, fy, cy], [0, 0, 1]])
  
     return intrinsic 
@@ -715,10 +707,6 @@ class GeometryKernelEncoder(nn.Module):
         """
         # b, n, _, _, _ = batch['image'].shape
         # B, C, H, W = batch['image'].shape # (1, 3, 256, 1024)
-        # print(f'Shape of input ground-img: {B},{C},{H},{W}') # 1, 3, 512, 512
-        # print("Representin B, C, H, W")
-        print(f'batch[image].shape {batch["image"].shape}')
-        
         b, n, _, _, _= batch['image'].shape
         # b n c h w
         images = batch['image'].flatten(0, 1)
