@@ -16,6 +16,10 @@ from jacobian import grid_sample
 from models_ford import loss_func
 from RNNs import NNrefine
 
+from torchvision.utils import make_grid
+import matplotlib.pyplot as plt
+import math
+
 EPS = utils.EPS
 
 
@@ -1182,6 +1186,35 @@ class LM_S2GP(nn.Module):
                 sat_conf = sat_conf_list[level]
                 grd_feat = grd_feat_list[level]
                 grd_conf = grd_conf_list[level]
+
+                # Visualize weights
+                # sat_feat
+                print("sat_feat.shape = ", sat_feat.shape) # (1, 256, 64, 64) 
+                C_sat, H_sat, W_sat = sat_feat.squeeze(0).shape
+                B_sat = C_sat // 3
+                sat_feat_visualize = sat_feat.squeeze(0)[:B_sat * 3]
+                sat_feat_visualize = sat_feat_visualize.reshape(B_sat, 3, H_sat, W_sat)
+                nrow = math.ceil(math.sqrt(sat_feat_visualize.shape[0]))
+                grid = make_grid(sat_feat_visualize, nrow=nrow, padding=1, normalize=True, scale_each=False)
+                plt.imshow(grid.to(device='cpu').permute(1, 2, 0))
+                plt.axis('off')
+                plt.gcf().set_size_inches(5, 5)
+                plt.show()
+                plt.savefig('sat_feat.png')
+
+                # grd_feat
+                print("grd_feat.shape = ", grd_feat.shape) # (1, 256, 64, 64) 
+                C_grd, H_grd, W_grd = grd_feat.squeeze(0).shape
+                B_grd = C_grd // 3
+                grd_feat_visualize = grd_feat.squeeze(0)[:B_grd * 3]
+                grd_feat_visualize = grd_feat_visualize.reshape(B_grd, 3, H_grd, W_grd)
+                nrow = math.ceil(math.sqrt(grd_feat_visualize.shape[0]))
+                grid = make_grid(grd_feat_visualize, nrow=nrow, padding=1, normalize=True, scale_each=False)
+                plt.imshow(grid.to(device='cpu').permute(1, 2, 0))
+                plt.axis('off')
+                plt.gcf().set_size_inches(5, 5)
+                plt.show()
+                plt.savefig('grd_feat.png')
 
                 grd_H, grd_W = grd_feat.shape[-2:]
                 sat_feat_proj, sat_conf_proj, dfeat_dpose, sat_uv, mask = self.project_map_to_grd(
