@@ -53,6 +53,6 @@ class CrossViewTransformer(nn.Module):
         z = y
         # print(f'cvt.py: z.shape  {z.shape}') # z.shape: torch.Size([1, 64, 200, 200])
         # k =  'bev', [start, stop] = [0, 1]
-        bev_dict = {k: z[start:stop] for k, (start, stop) in self.outputs.items()}
+        bev_dict = {k: z[:, start:stop] for k, (start, stop) in self.outputs.items()}
         return bev_dict
         return {k: z[:, start:stop] for k, (start, stop) in self.outputs.items()}

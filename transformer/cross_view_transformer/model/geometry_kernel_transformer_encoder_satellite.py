@@ -421,6 +421,9 @@ class Encoder(nn.Module):
 
         features = [self.down(y) for y in self.backbone(self.norm(images))]
 
+        # Note: Only return the features after passing backbone
+        print(f'[Satellite net] features.shape: {features.shape}')
+        return features 
 
         x = self.bev_embedding.get_prior()              # d H W
         x = repeat(x, '... -> b ...', b=b)              # b d H W
