@@ -113,7 +113,7 @@ class GoogleMapDownloader:
                 # Key from goroyeh56@gmail.com
                 
                 # TODO:
-                # API_KEY='AIzaSyCINQSR91iBJVrH7CXhNU-wBU6mJWtyIzk' 
+                API_KEY='AIzaSyCINQSR91iBJVrH7CXhNU-wBU6mJWtyIzk' 
                 # API_KEY = "AIzaSyA7WherFxvKa_f3PLnh1pwZo4KWSdGyQmA" # key from leetkt
                 url = f'https://maps.googleapis.com/maps/api/staticmap?center={self._lat},{self._lng}&maptype={self._layer}&zoom={self._zoom}&scale=2&size=640x640&key={API_KEY}'
 
@@ -239,36 +239,55 @@ y: 1114 (-11m)
 
 '''
 
+def rad2deg(radian):
+    return radian*180 / math.pi
+def deg2rad(degree):
+    return degree * math.pi/180    
+
 # Input: The origin (lat, long), translation(x, y)
 # Output: corresponding (lat, long) at this timestamp(give the translation x,y)
-def meter2latlon(lat, lon, x, y):
-    print(f'    init lat: {lat}')
-    print(f'    init long: {lon}')
+def meter2latlon(init_lat, init_lon, x, y, type="MATLAB"):
+    print(f'    init lat: {init_lat}')
+    print(f'    init long: {init_lon}')
     print(f'    x: {x}')       
     print(f'    y: {y}')
 
-    #  lat = ( y /  { radius * 2*pi } ) * rad2deg
-    #  lon = x /  { 2 * pi * radius * cos(lat*(1/rad2deg)) }
-    r = 6378137 # equatorial radius
-    rad2deg = 180/math.pi
-    lat -= (y / (r*2*math.pi)) * rad2deg
-    lon += (x / (r*2*math.pi*math.cos(lat*(1/rad2deg)))) * rad2deg
-    return lat, lon
+    if type=="Sphere-Approximate":
+        #  lat = ( y /  { radius * 2*pi } ) * rad2deg
+        #  lon = x /  { 2 * pi * radius * cos(lat*(1/rad2deg)) }
+        r = 6378137 # equatorial radius
+     
+        lat = rad2deg(init_lat - (y / (r*2*math.pi))) 
+        lon = init_lon + rad2deg( (x / (r*2*math.pi*math.cos(deg2rad(lat)))) )
+        return lat, lon
+    elif type=="Yujiao":
+        r = 6378137 # equatorial radius
+        flatten = 1/298257 # flattening
+        E2 = flatten * (2- flatten)
+        m = r * np.pi/180  
+        coslat = np.cos(lat * np.pi/180)
+        w2 = 1/(1-E2 *(1-coslat*coslat))
+        w = np.sqrt(w2)
+        kx = m * w * coslat
+        ky = m * w * w2 * (1-E2)
+        lon = init_lon + x / kx 
+        lat = init_lat - y / ky
+        
+        return lat, lon 
 
-    r = 6378137 # equatorial radius
-    flatten = 1/298257 # flattening
-    E2 = flatten * (2- flatten)
-    m = r * np.pi/180  
-    coslat = np.cos(lat * np.pi/180)
-    w2 = 1/(1-E2 *(1-coslat*coslat))
-    w = np.sqrt(w2)
-    kx = m * w * coslat
-    ky = m * w * w2 * (1-E2)
-    lon += x / kx 
-    lat -= y / ky
-    
-    return lat, lon 
+    else: # Default
 
+        f = 1/298257 # flattening -> MATLAB ?    
+        R =     6378137 # equatorial radius
+        dNorth = x
+        dEast =  y
+        Rn = R / (math.sqrt(1 - (2*f-f*f)*math.sin(deg2rad(init_lat))*math.sin(deg2rad(init_lon)))) # Prime Vertical Radius
+        Rm = Rn * ( (1-(2*f-f*f)) / (1 - (2*f-f*f)*math.sin(deg2rad(init_lat))*math.sin(deg2rad(init_lon))) )# Meridional Radius 
+        dLat = dNorth * math.atan2(1, Rm)
+        dLon = dEast * math.atan2(1, Rn* math.cos(deg2rad(init_lat)))
+        lat = init_lat + rad2deg(dLat)
+        lon = init_lon + rad2deg(dLon)
+        return lat, lon 
 
 
 # from pyproj import Proj, transform
@@ -279,7 +298,7 @@ def meter2latlon(lat, lon, x, y):
 #     lat, lon = transform(inProj,outProj, x, y)
 #     return lat, lon
 
-def getLatLongfromSceneIdx(INIT_LAT, INIT_LONG, poses, idx):
+def getLatLongfromSceneIdx(INIT_LAT, INIT_LONG, poses, idx, type):
     print(f'len(poses): {len(poses)}, idx: {idx}')
     assert idx < len(poses)
     
@@ -289,8 +308,19 @@ def getLatLongfromSceneIdx(INIT_LAT, INIT_LONG, poses, idx):
     x, y, _ = translation  
     # Covert (x,y) to lat,long
 
+    # scene1100 idx 0 :
+    '''
+        x: 396.56439208984375
+        y: 1125.94482421875    
+    '''
+    # if idx==0:
+    #     x = 0
+    #     y = 0
+    # if idx==39:
+    #     x = 100
+    #     y = 50
 
-    lat, long = meter2latlon(INIT_LAT, INIT_LONG, x,y)  
+    lat, long = meter2latlon(INIT_LAT, INIT_LONG, x,y, type)  
     return lat, long  
 
 def get_image_name(image_name_with_path):
@@ -315,7 +345,7 @@ def main():
 
     # Path: path to /v1.0-mini/ or /v1.0-trainval
     NUSCENES_DATASET_PATH = '/home/goroyeh/nuScene_dataset/media/datasets/nuscenes'
-    nusc = NuScenes(version='v1.0-mini', dataroot=NUSCENES_DATASET_PATH, verbose=True)
+    nusc = NuScenes(version='v1.0-trainval', dataroot=NUSCENES_DATASET_PATH, verbose=True)
 
     # TODO: This path name should be changed
     nuScene_dataset_PATH = '/home/goroyeh/nuScene_dataset'
@@ -382,13 +412,17 @@ def main():
                 # print(f'satmap_name: {satmap_name}')       
                 satmap_name = satmap_scene_path + '/' + satmap_name
                 if not os.path.exists(satmap_name) and sensor=="CAM_FRONT":  
-                    # Get (lat, long) given this ego_pose
-                    lat, long =  getLatLongfromSceneIdx(INIT_LAT, INIT_LONG, ego_poses, i)
+                    # Get (lat, long) given this ego_pose                           # Use approximation derived from MATLAB script
+                    lat, long =  getLatLongfromSceneIdx(INIT_LAT, INIT_LONG, ego_poses, i, "MATLAB")
 
-                    if i==0:
-                        lat, long = INIT_LAT, INIT_LONG
-                    elif i==39:
-                        lat, long = INIT_LAT+30, INIT_LONG+30
+                    # zoom-level
+                    # 0: whole world i
+                    # 1: 1/2 world
+
+                    # if i==0:
+                    #     lat, long = INIT_LAT, INIT_LONG
+                    # elif i==39:
+                    #     lat, long = INIT_LAT+30, INIT_LONG+30
                     # ------- Query satmap from Google Map -------- #
                     gmd = GoogleMapDownloader(lat, long, int(sys.argv[1]), GoogleMapsLayers.SATELLITE)
                     # print("The tile coordinates are {}".format(gmd.getXY()))
