@@ -14,12 +14,7 @@ import os
 import math
 import sys
 
-NUM_IMAGES = 10
 TILE_SIZE = 1280
-
-SATIMG_INTERVALS = [(101, 199), (5011, 5199)]
-# SATIMG_INTERVALS = [(101, 102), (5011, 5012)]
-
 
 class GoogleMapsLayers:
     ROADMAP = "roadmap"
@@ -112,20 +107,15 @@ class GoogleMapDownloader:
 
         for x in range(0, tile_width):
             for y in range(0, tile_height):
-                print("lat = ", self._lat, ", lng = ", self._lng)
+                print("     lat = ", self._lat, ", lng = ", self._lng)
                 # url = f'https://mt0.google.com/vt?lyrs={self._layer}&x=' + str(start_x + x) + '&y=' + str(start_y + y) + '&z=' + str(
                 # self._zoom)
                 # Key from goroyeh56@gmail.com
-                API_KEY='AIzaSyCINQSR91iBJVrH7CXhNU-wBU6mJWtyIzk'
+                
+                # TODO:
+                # API_KEY='AIzaSyCINQSR91iBJVrH7CXhNU-wBU6mJWtyIzk' 
                 # API_KEY = "AIzaSyA7WherFxvKa_f3PLnh1pwZo4KWSdGyQmA" # key from leetkt
                 url = f'https://maps.googleapis.com/maps/api/staticmap?center={self._lat},{self._lng}&maptype={self._layer}&zoom={self._zoom}&scale=2&size=640x640&key={API_KEY}'
-                # url = f'https://maps.googleapis.com/maps/api/staticmap?v=beta&center={self._lat:.6f},{self._lng:.6f}&maptype={self._layer}&zoom={self._zoom}&scale=1&size=640x640&key=AIzaSyA7WherFxvKa_f3PLnh1pwZo4KWSdGyQmA'
-                # url = f'https://maps.googleapis.com/maps/api/vt?v=beta&mapId=1&x=1&y=0&maptype={self._layer}&zoom={self._zoom}&scale=1&size=640x640&key=AIzaSyA7WherFxvKa_f3PLnh1pwZo4KWSdGyQmA'
-                # print("url = ", url)
-                # url = f'https://maps.googleapis.com/maps/api/staticmap?center=51.477222,0&maptype=satellite&zoom={self._zoom}&size=640x640&key=AIzaSyA7WherFxvKa_f3PLnh1pwZo4KWSdGyQmA'
-
-                # print("start_x = ", start_x, ", start_y = ", start_y)
-                # url = f'https://maps.googleapis.com/maps/api/staticmap?x=100&y=100&maptype=satellite&zoom={self._zoom}&key=AIzaSyA7WherFxvKa_f3PLnh1pwZo4KWSdGyQmA'
 
                 current_tile = str(x) + '-' + str(y)
                 urllib.request.urlretrieve(url, current_tile)
@@ -206,7 +196,6 @@ e.g. Inside CAM_BACK/
     - n008-2018-05-21-11-06-59-0400__satmap__1526915243037570.jpg
 
 
-TODO 1:
 Organized Samples into each scene:
 nuScenes_dataset/
     samples/
@@ -236,10 +225,36 @@ INIT_LONG=  -71.05785369873047
 from nuscenes.nuscenes import NuScenes
 import torch
 import numpy as np
+import shutil
+
+'''
+scene-1100
+sample 0:
+x: 396
+y: 1125
+
+sample 39:
+x: 401  (+5m)
+y: 1114 (-11m)
+
+'''
 
 # Input: The origin (lat, long), translation(x, y)
 # Output: corresponding (lat, long) at this timestamp(give the translation x,y)
 def meter2latlon(lat, lon, x, y):
+    print(f'    init lat: {lat}')
+    print(f'    init long: {lon}')
+    print(f'    x: {x}')       
+    print(f'    y: {y}')
+
+    #  lat = ( y /  { radius * 2*pi } ) * rad2deg
+    #  lon = x /  { 2 * pi * radius * cos(lat*(1/rad2deg)) }
+    r = 6378137 # equatorial radius
+    rad2deg = 180/math.pi
+    lat -= (y / (r*2*math.pi)) * rad2deg
+    lon += (x / (r*2*math.pi*math.cos(lat*(1/rad2deg)))) * rad2deg
+    return lat, lon
+
     r = 6378137 # equatorial radius
     flatten = 1/298257 # flattening
     E2 = flatten * (2- flatten)
@@ -254,15 +269,32 @@ def meter2latlon(lat, lon, x, y):
     
     return lat, lon 
 
+
+
+# from pyproj import Proj, transform
+
+# def meter2latlon_pyproj(init_lat, init_lon, x, y):
+#     inProj = Proj(init='epsg:3857')
+#     outProj = Proj(init='epsg:4326')
+#     lat, lon = transform(inProj,outProj, x, y)
+#     return lat, lon
+
 def getLatLongfromSceneIdx(INIT_LAT, INIT_LONG, poses, idx):
+    print(f'len(poses): {len(poses)}, idx: {idx}')
+    assert idx < len(poses)
+    
     pose = poses[idx]
     # rotation = torch.FloatTensor(pose['rotation'])
     translation = torch.FloatTensor(pose['translation'])  
     x, y, _ = translation  
-    print(f'pose (x,y): ({x},{y})')
     # Covert (x,y) to lat,long
+
+
     lat, long = meter2latlon(INIT_LAT, INIT_LONG, x,y)  
     return lat, long  
+
+def get_image_name(image_name_with_path):
+    return ''.join(image_name_with_path.split("/")[2:])
 
 def get_satmap_name(image_name):
     x = ''.join(image_name.split("/")[2:]).split("__")
@@ -299,19 +331,20 @@ def main():
     for scene in nusc.scene:
         scene_name = scene['name']
         print(f'{scene_name} has {scene["nbr_samples"]} samples')
-        num_samples = scene["nbr_samples"]
+        num_samples = scene["nbr_samples"] # e.g. 39 => idx: 0-38
 
         # Get ego_poses for this scene
         print(f'Get poses for {scene["name"]}')
-        stop += scene['nbr_samples']-1
+        stop += scene['nbr_samples']
         ego_poses = nusc.ego_pose[start : stop] # a list of k/v pairs
         ego_poses_list.append(nusc.ego_pose[start : stop])
-        start = stop+1
+        start = stop
         # mkdir satmap/scene_name/
         satmap_scene_path = nuScene_dataset_PATH + '/satmap/' + scene_name
         if not os.path.exists(satmap_scene_path):
             print(f'creating directory: {satmap_scene_path}')
             os.mkdir(satmap_scene_path)
+
         print(f'Extracing {scene_name} satellite_maps...')
 
         # --- Set up the first sample --- #
@@ -326,43 +359,49 @@ def main():
 
         # --- Iterate over samples to setup images and get satmap's name... --- #
         for i in range(num_samples):    
+            print(f'{scene_name}: sample {i}')
             for sensor in sensors:
+                print(f'    sensor: {sensor}')
                 cam_data = nusc.get('sample_data', sample_data[sensor])
-                image_name = cam_data['filename']
-
                 # Get images name
-                image_name = cam_data['filename']
-                print(f'\nimage_name: {image_name}')
+                image_name = get_image_name(cam_data['filename'])
+                # print(f'\nimage_name: {image_name}')
 
                 # mkdir samples/scene_name/sensor
-                scene_sensor_path = samples_scene_path + sensor
+                scene_sensor_path = samples_scene_path + '/' + sensor
                 if not os.path.exists(scene_sensor_path):
                     os.mkdir(scene_sensor_path)
                 # Copy this image from original path to new path
+                scene_sample_img_path = '/home/goroyeh/nuScene_dataset/media/datasets/nuscenes/samples/'+sensor+'/' + image_name
+                dst = samples_scene_path + '/' + sensor + '/'+image_name
+                if not os.path.exists(dst):
+                    shutil.copyfile(scene_sample_img_path, dst)
 
                 # Get satellite name from this image 
-                satmap_name = get_satmap_name(image_name)  
-                print(f'satmap_name: {satmap_name}')       
-                satmap_name = satmap_scene_path + satmap_name
-                if not os.path.exists(satmap_name):  
+                satmap_name = get_satmap_name(cam_data['filename'])  
+                # print(f'satmap_name: {satmap_name}')       
+                satmap_name = satmap_scene_path + '/' + satmap_name
+                if not os.path.exists(satmap_name) and sensor=="CAM_FRONT":  
                     # Get (lat, long) given this ego_pose
                     lat, long =  getLatLongfromSceneIdx(INIT_LAT, INIT_LONG, ego_poses, i)
-    
+
+                    if i==0:
+                        lat, long = INIT_LAT, INIT_LONG
+                    elif i==39:
+                        lat, long = INIT_LAT+30, INIT_LONG+30
                     # ------- Query satmap from Google Map -------- #
                     gmd = GoogleMapDownloader(lat, long, int(sys.argv[1]), GoogleMapsLayers.SATELLITE)
-                    print("The tile coordinates are {}".format(gmd.getXY()))
+                    # print("The tile coordinates are {}".format(gmd.getXY()))
                     img = gmd.generateImage()
                     # save images to disk
-                    
                     img.save(satmap_name)            
 
             
             # Update sample_token, sample, and sample_data
             sample_token = sample['next']
-            sample = nusc.get('sample', sample_token)
-            sample_data = sample['data']
-                
-
+            if sample_token!="":
+                sample = nusc.get('sample', sample_token)
+                sample_data = sample['data']
 
 
 
