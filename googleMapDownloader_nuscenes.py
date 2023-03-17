@@ -113,8 +113,8 @@ class GoogleMapDownloader:
                 # Key from goroyeh56@gmail.com
                 
                 # TODO:
-                API_KEY='AIzaSyCINQSR91iBJVrH7CXhNU-wBU6mJWtyIzk' 
-                # API_KEY = "AIzaSyA7WherFxvKa_f3PLnh1pwZo4KWSdGyQmA" # key from leetkt
+                # API_KEY='AIzaSyCINQSR91iBJVrH7CXhNU-wBU6mJWtyIzk' 
+                API_KEY = "AIzaSyA7WherFxvKa_f3PLnh1pwZo4KWSdGyQmA" # key from leetkt
                 url = f'https://maps.googleapis.com/maps/api/staticmap?center={self._lat},{self._lng}&maptype={self._layer}&zoom={self._zoom}&scale=2&size=640x640&key={API_KEY}'
 
                 current_tile = str(x) + '-' + str(y)
@@ -247,10 +247,10 @@ def deg2rad(degree):
 # Input: The origin (lat, long), translation(x, y)
 # Output: corresponding (lat, long) at this timestamp(give the translation x,y)
 def meter2latlon(init_lat, init_lon, x, y, type="MATLAB"):
-    print(f'    init lat: {init_lat}')
-    print(f'    init long: {init_lon}')
-    print(f'    x: {x}')       
-    print(f'    y: {y}')
+    # print(f'    init lat: {init_lat}')
+    # print(f'    init long: {init_lon}')
+    # print(f'    x: {x}')       
+    # print(f'    y: {y}')
 
     if type=="Sphere-Approximate":
         #  lat = ( y /  { radius * 2*pi } ) * rad2deg
@@ -299,7 +299,7 @@ def meter2latlon(init_lat, init_lon, x, y, type="MATLAB"):
 #     return lat, lon
 
 def getLatLongfromSceneIdx(INIT_LAT, INIT_LONG, poses, idx, type):
-    print(f'len(poses): {len(poses)}, idx: {idx}')
+    # print(f'len(poses): {len(poses)}, idx: {idx}')
     assert idx < len(poses)
     
     pose = poses[idx]
@@ -359,6 +359,12 @@ def main():
     ego_poses_list = []
     # Iterate each scene
     for scene in nusc.scene:
+        
+        scene_num = int(scene['name'].split("-")[1])
+        if scene_num <= 790:
+            continue
+
+        print(f'--------- [scene_num] {scene_num}-----------')
         scene_name = scene['name']
         print(f'{scene_name} has {scene["nbr_samples"]} samples')
         num_samples = scene["nbr_samples"] # e.g. 39 => idx: 0-38
@@ -389,9 +395,9 @@ def main():
 
         # --- Iterate over samples to setup images and get satmap's name... --- #
         for i in range(num_samples):    
-            print(f'{scene_name}: sample {i}')
+            # print(f'{scene_name}: sample {i}')
             for sensor in sensors:
-                print(f'    sensor: {sensor}')
+                # print(f'    sensor: {sensor}')
                 cam_data = nusc.get('sample_data', sample_data[sensor])
                 # Get images name
                 image_name = get_image_name(cam_data['filename'])
