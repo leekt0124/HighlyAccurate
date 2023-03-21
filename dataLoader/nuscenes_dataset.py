@@ -524,7 +524,7 @@ class NuScenesDataset(torch.utils.data.Dataset):
             tmp = image_filename.split('/')
             image_name = ''.join( tmp[-2]+'/'+tmp[-1] )
             img_full_path = SAMPLES_PATH + scene_name + '/' + image_name
-            print(f'img_full_path: {img_full_path}')
+            # print(f'img_full_path: {img_full_path}')
 
             with Image.open(img_full_path, 'r') as GrdImg:
                 grd_img = GrdImg.convert('RGB')
@@ -536,8 +536,10 @@ class NuScenesDataset(torch.utils.data.Dataset):
         extrinsics = torch.FloatTensor(sample['extrinsics'])
 
         sat_map_filename= SATMAP_PATH + get_satmap_name(grd_image_names[1])
-        if os.path.exists(sat_map_filename):
-            print(f'satmap: {sat_map_filename}')
+        if not os.path.exists(sat_map_filename):
+            print(f'satmap {sat_map_filename} not exist! Either wrong filename or need to download from google map.')
+            # print(f'satmap: {sat_map_filename}')
+
         with Image.open(sat_map_filename, 'r') as SatMap:
             sat_map = SatMap.convert('RGB')
 
@@ -575,11 +577,6 @@ class NuScenesDataset(torch.utils.data.Dataset):
         # transform
         if self.satmap_transform is not None:
             sat_map = self.satmap_transform(sat_map)
-
-        print(f'type(intrinscis) {type(intrinsics)}')
-        print(f'type(ext) {type(extrinsics)}')
-        print(f'type(grd_imgs) {type(grd_imgs)}')
-        print(f'type(sat_map) {type(sat_map)}')
 
         # grd_left_imgs[0] : shape (3, 256, 1024) (C, H, W)
         return sat_map, grd_imgs, intrinsics, extrinsics, \
