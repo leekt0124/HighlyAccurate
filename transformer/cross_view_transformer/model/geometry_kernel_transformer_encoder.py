@@ -560,7 +560,7 @@ class GeometryKernelAttention(nn.Module):
         # 1 d H W
         w_embed = self.bev_embed(world[None])
         # (b n) d H W
-        bev_embed = w_embed - c_embed
+        bev_embed = w_embed - c_embed #  Query: 
         # (b n) d H W
         bev_embed = bev_embed / (bev_embed.norm(dim=1, keepdim=True) + 1e-7)
         # b n d H W

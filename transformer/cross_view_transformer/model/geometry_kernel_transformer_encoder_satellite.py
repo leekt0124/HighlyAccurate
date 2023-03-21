@@ -410,7 +410,7 @@ class Encoder(nn.Module):
         I = setup_intrinsics(batch['intrinsics_dict'])
         I = I.to(batch['extrinsics'].device)
         # print(f'Intrinsics.shape : {I.shape}' )
-        # b n 3 3
+        # b n 3 3ex
         I_inv = I.inverse()
         # I_inv = batch['intrinsics'].inverse()
         # b n 4 4
@@ -423,7 +423,7 @@ class Encoder(nn.Module):
 
         # Note: Only return the features after passing backbone
         print(f'[Satellite net] features.shape: {features.shape}')
-        return features 
+        # return features 
 
         x = self.bev_embedding.get_prior()              # d H W
         x = repeat(x, '... -> b ...', b=b)              # b d H W

@@ -1,11 +1,18 @@
-import random
-
-import numpy as np
-import os
-from PIL import Image
-from torch.utils.data import Dataset
-
 import torch
+import numpy as np
+import cv2
+
+from pathlib import Path
+from functools import lru_cache
+
+from pyquaternion import Quaternion
+from shapely.geometry import MultiPolygon
+
+from .common import INTERPOLATION, get_view_matrix, get_pose, get_split, get_yaw
+from .transforms import Sample, SaveDataTransform
+
+from PIL import Image
+import os
 import pandas as pd
 import utils
 import torchvision.transforms.functional as TF
@@ -15,52 +22,80 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-root_dir = '/mnt/workspace/datasets/kitti-360-SLAM' # '../../data/Kitti' # '../Data' #'..\\Data' #
+STATIC = ['lane', 'road_segment']
+DIVIDER = ['road_divider', 'lane_divider']
+DYNAMIC = [
+    'car', 'truck', 'bus',
+    'trailer', 'construction',
+    'pedestrian',
+    'motorcycle', 'bicycle',
+]
 
-satmap_dir = 'satmap'
-calibration_dir = 'KITTI-360/calibration'
-grdimage_dir = 'KITTI-360/data_2d_raw'
-perspective_left_color_camera_dir = 'image_00/data_rect'  # 'image_02\\data' #
-perspective_right_color_camera_dir = 'image_01/data_rect'  # 'image_03\\data' #
-fisheye_left_color_camera_dir = 'image_02/data_rgb'  # 'image_02\\data' #
-fisheye_right_color_camera_dir = 'image_03/data_rgb'  # 'image_03\\data' #
-pose_dir = 'KITTI-360/data_poses'
-oxts_dir = 'oxts/data'
-
-GrdImg_H = 256
-GrdImg_W = 1024
-GrdOriImg_H = 376
-GrdOriImg_W = 1408
-num_thread_workers = 2
-
-# train_file = './dataLoader/train_kitti_360.txt'
-# test_file = './dataLoader/test_kitti_360.txt'
-train_file = '../../../dataLoader/kitti_360_train.txt'
-test_file = '../../../dataLoader/kitti_360_test.txt'
+CLASSES = STATIC + DIVIDER + DYNAMIC
+NUM_CLASSES = len(CLASSES)
 
 
-'''
-This is the dataLoader file for loading 6-camera images and satellite maps
-for each scene from nuscenes dataset
+def get_data(
+    dataset_dir,
+    labels_dir,
+    input_image_transform,
+    split,
+    shift_range_lat, shift_range_lon, rotation_range, 
+    version ='v1.0-mini',
+    # version ='v1.0-trainval',
+    dataset='unused',                   # ignore
+    augment='unused',                   # ignore
+    image='unused',                     # ignore
+    label_indices='unused',             # ignore
+    num_classes=NUM_CLASSES,            # in here to make config consistent
+    **dataset_kwargs
+):
+    assert num_classes == NUM_CLASSES
+
+    helper = NuScenesSingleton(dataset_dir, version)
+    transform = SaveDataTransform(labels_dir)
+
+    # Format the split name
+    split = f'mini_{split}' if version == 'v1.0-mini' else split
+    print(f'In get_data(): split: {split}')
+    split_scenes = get_split(split, 'nuscenes')
+
+    result = list()
+    for scene_name, scene_record in helper.get_scenes():
+        if scene_name not in split_scenes:
+            continue
+
+        data = NuScenesDataset(scene_name, scene_record, helper, input_image_transform,
+                               transform=transform, shift_range_lat=20, shift_range_lon=20, rotation_range=10, **dataset_kwargs)
+        result.append(data)
+
+    return result
 
 
-e.g.:  /mnt/workspace/datasets/kitti-360-SLAM/KITTI-360/calibration/calib_cam_to_pose.txt'
-os.path.join(self.root, calibration_dir, 'calib_cam_to_pose.txt')
+def get_split_data(dataset_dir, labels_dir, transform, shift_range_lat, shift_range_lon, rotation_range, split, loader_config, loader=True, shuffle=False):
+    # get a list of NuScenesDataset
+    datasets = get_data(
+        dataset_dir,
+        labels_dir,
+        transform,
+        split,
+        shift_range_lat,
+        shift_range_lon,
+        rotation_range
+        )
 
-e.g.: /home/goroyeh/nuScene_dataset/samples/scene-0001/CAM_BACK/xxxx.jpg
-self.root = /home/goroyeh/nuScene_dataset
-samples_dir = '/samples'
-scene_dir   = filepath[38:48]
-image_name  = filepath[49:]
-os.path.join(self.root, samples_dir, scene_dir, sensor_dir, image_name)
+    if not loader:
+        return datasets
 
-0               16            30      38
-/home/goroyeh/nuScene_dataset/samples/scene-0001/CAM_BACK/n015-2018-07-18-11-07-57+0800__CAM_BACK__1531883540037711.jpg
-'''
-root_dir = '/home/goroyeh/nuScene_dataset'
-samples_dir = '/samples'
-satmap_dir = '/satmap'
+    # Concatenate a list of NuScenesDataset => one dataset
+    dataset = torch.utils.data.ConcatDataset(datasets)
 
+    loader_config = dict(loader_config)
+
+    # if loader_config['num_workers'] == 0:
+        # loader_config['prefetch_factor'] = 2
+    # return a DataLoader as "train" or "val" dataloader 
+    return torch.utils.data.DataLoader(dataset, shuffle=shuffle, **loader_config)
 
 
 def get_satmap_name(filename):
@@ -72,176 +107,444 @@ def get_satmap_name(filename):
     last_item = filename.split('/')[-1]
     # Replace image_name by __satmap__
     tmp_list = last_item.split('__')
-    tmp_list[1] = "__satmap__"
+    tmp_list[1] = "_satmap_"
     # Convert a list to a string and return
     satmap_name = ''.join(tmp_list)
     return satmap_name
 
-def get_image_name(filename):
-    # input filename:
-    # scene-0001/CAM_BACK_LEFT/n015-2018-07-18-11-07-57+0800__CAM_BACK_LEFT__1531883530447423.jpg
-    last_item = filename.split('/')[-1]
-    image_name = ''.join(last_item)
-    return image_name
 
-class SatGrdDataset(Dataset):
-    def __init__(self, root, file,
-                 transform=None, shift_range_lat=20, shift_range_lon=20, rotation_range=10):
-        self.root = root
+class NuScenesSingleton:
+    """
+    Wraps both nuScenes and nuScenes map API
+
+    This was an attempt to sidestep the 30 second loading time in a "clean" manner
+    """
+    def __init__(self, dataset_dir, version):
+        """
+        dataset_dir: /path/to/nuscenes/
+        version: v1.0-trainval
+        """
+        self.dataroot = str(dataset_dir)
+        self.nusc = self.lazy_nusc(version, self.dataroot)
+
+    @classmethod
+    def lazy_nusc(cls, version, dataroot):
+        # Import here so we don't require nuscenes-devkit unless regenerating labels
+        from nuscenes.nuscenes import NuScenes
+
+        if not hasattr(cls, '_lazy_nusc'):
+            cls._lazy_nusc = NuScenes(version=version, dataroot=dataroot)
+
+        return cls._lazy_nusc
+
+    def get_scenes(self):
+        for scene_record in self.nusc.scene:
+            yield scene_record['name'], scene_record
+
+    @lru_cache(maxsize=16)
+    def get_map(self, log_token):
+        # Import here so we don't require nuscenes-devkit unless regenerating labels
+        from nuscenes.map_expansion.map_api import NuScenesMap
+
+        map_name = self.nusc.get('log', log_token)['location']
+        nusc_map = NuScenesMap(dataroot=self.dataroot, map_name=map_name)
+
+        return nusc_map
+
+    def __new__(cls, *args, **kwargs):
+        if not hasattr(cls, '_singleton'):
+            obj = super(NuScenesSingleton, cls).__new__(cls)
+            obj.__init__(*args, **kwargs)
+
+            cls._singleton = obj
+
+        return cls._singleton
+
+
+class NuScenesDataset(torch.utils.data.Dataset):
+    CAMERAS = ['CAM_FRONT_LEFT', 'CAM_FRONT', 'CAM_FRONT_RIGHT',
+               'CAM_BACK_LEFT', 'CAM_BACK', 'CAM_BACK_RIGHT']
+
+    def __init__(
+        self,
+        scene_name: str,
+        scene_record: dict,
+        helper: NuScenesSingleton,
+        input_image_transform,
+        transform=None,                 # transform: the label class (SaveDataTransform)
+        cameras=[[0, 1, 2, 3, 4, 5]],
+        bev={'h': 200, 'w': 200, 'h_meters': 100, 'w_meters': 100, 'offset': 0.0},
+        shift_range_lat=20, shift_range_lon=20, rotation_range=10
+    ):
+        self.scene_name = scene_name
+        self.transform = transform
+
+        self.nusc = helper.nusc
+        self.nusc_map = helper.get_map(scene_record['log_token'])
+
+        self.view = get_view_matrix(**bev)
+        self.bev_shape = (bev['h'], bev['w'])
+
+        self.samples = self.parse_scene(scene_record, cameras)
+
+        # Added by Goro
+        if input_image_transform != None:
+            self.satmap_transform = input_image_transform[0]
+            self.grdimage_transform = input_image_transform[1]
 
         self.meter_per_pixel = utils.get_meter_per_pixel(scale=1)
         self.shift_range_meters_lat = shift_range_lat  # in terms of meters
         self.shift_range_meters_lon = shift_range_lon  # in terms of meters
         self.shift_range_pixels_lat = shift_range_lat / self.meter_per_pixel  # shift range is in terms of meters
         self.shift_range_pixels_lon = shift_range_lon / self.meter_per_pixel  # shift range is in terms of meters
-
         # self.shift_range_meters = shift_range  # in terms of meters
-
         self.rotation_range = rotation_range  # in terms of degree
 
-        self.skip_in_seq = 2  # skip 2 in sequence: 6,3,1~
-        if transform != None:
-            self.satmap_transform = transform[0]
-            self.grdimage_transform = transform[1]
+    def parse_scene(self, scene_record, camera_rigs):
+        data = []
+        sample_token = scene_record['first_sample_token']
 
-        self.pro_grdimage_dir = 'raw_data'
+        while sample_token:
+            sample_record = self.nusc.get('sample', sample_token)
 
-        self.satmap_dir = satmap_dir
+            for camera_rig in camera_rigs:
+                data.append(self.parse_sample_record(sample_record, camera_rig))
 
-        with open(file, 'r') as f:
-            file_name = f.readlines()
-        self.file_name = [file[:-1] for file in file_name]
+            sample_token = sample_record['next']
+
+        return data
+
+    def parse_pose(self, record, *args, **kwargs):
+        return get_pose(record['rotation'], record['translation'], *args, **kwargs)
+
+    def get_yaw_in_radian(self, record):
+        return get_yaw(record['rotation'])
+    
+    def parse_sample_record(self, sample_record, camera_rig):
+        lidar_record = self.nusc.get('sample_data', sample_record['data']['LIDAR_TOP'])
+        egolidar = self.nusc.get('ego_pose', lidar_record['ego_pose_token'])
+
+        world_from_egolidarflat = self.parse_pose(egolidar, flat=True)
+        egolidarflat_from_world = self.parse_pose(egolidar, flat=True, inv=True)
+
+        cam_channels = []
+        images = []
+        intrinsics = []
+        extrinsics = []
+
+        for cam_idx in camera_rig:
+            cam_channel = self.CAMERAS[cam_idx]
+            cam_token = sample_record['data'][cam_channel]
+
+            cam_record = self.nusc.get('sample_data', cam_token)
+            egocam = self.nusc.get('ego_pose', cam_record['ego_pose_token'])
+            cam = self.nusc.get('calibrated_sensor', cam_record['calibrated_sensor_token'])
+
+            cam_from_egocam = self.parse_pose(cam, inv=True)
+            egocam_from_world = self.parse_pose(egocam, inv=True)
+
+            E = cam_from_egocam @ egocam_from_world @ world_from_egolidarflat
+            I = cam['camera_intrinsic']
+
+            full_path = Path(self.nusc.get_sample_data_path(cam_token))
+            # print(f'NuSceneDataset parse_sample_record full_path {full_path}')
+            image_path = str(full_path.relative_to(self.nusc.dataroot))
+            # print(f'image_path {image_path}')
+
+            cam_channels.append(cam_channel)
+            intrinsics.append(I)
+            extrinsics.append(E.tolist())
+            images.append(image_path)
+
+            yaw = self.get_yaw_in_radian(egolidar)
+
+        return {
+            'scene': self.scene_name,
+            'token': sample_record['token'],
+
+            'pose': world_from_egolidarflat.tolist(),
+            'pose_inverse': egolidarflat_from_world.tolist(),
+
+            'yaw' : yaw,
+
+            'cam_ids': list(camera_rig),
+            'cam_channels': cam_channels,
+            'intrinsics': intrinsics,
+            'extrinsics': extrinsics,
+            'images': images,
+        }
+
+    def get_dynamic_objects(self, sample, annotations):
+        h, w = self.bev_shape[:2]
+
+        segmentation = np.zeros((h, w), dtype=np.uint8)
+        center_score = np.zeros((h, w), dtype=np.float32)
+        center_offset = np.zeros((h, w, 2), dtype=np.float32)
+        center_ohw = np.zeros((h, w, 4), dtype=np.float32)
+        buf = np.zeros((h, w), dtype=np.uint8)
+
+        visibility = np.full((h, w), 255, dtype=np.uint8)
+
+        coords = np.stack(np.meshgrid(np.arange(w), np.arange(h)), -1).astype(np.float32)
+
+        for ann, p in zip(annotations, self.convert_to_box(sample, annotations)):
+            box = p[:2, :4]
+            center = p[:2, 4]
+            front = p[:2, 5]
+            left = p[:2, 6]
+
+            buf.fill(0)
+            cv2.fillPoly(buf, [box.round().astype(np.int32).T], 1, INTERPOLATION)
+            mask = buf > 0
+
+            if not np.count_nonzero(mask):
+                continue
+
+            sigma = 1
+            segmentation[mask] = 255
+            center_offset[mask] = center[None] - coords[mask]
+            center_score[mask] = np.exp(-(center_offset[mask] ** 2).sum(-1) / (sigma ** 2))
+
+            # orientation, h/2, w/2
+            center_ohw[mask, 0:2] = ((front - center) / (np.linalg.norm(front - center) + 1e-6))[None]
+            center_ohw[mask, 2:3] = np.linalg.norm(front - center)
+            center_ohw[mask, 3:4] = np.linalg.norm(left - center)
+
+            visibility[mask] = ann['visibility_token']
+ 
+        segmentation = np.float32(segmentation[..., None])
+        center_score = center_score[..., None]
+
+        result = np.concatenate((segmentation, center_score, center_offset, center_ohw), 2)
+
+        # (h, w, 1 + 1 + 2 + 2)
+        return result, visibility
+
+    def convert_to_box(self, sample, annotations):
+        # Import here so we don't require nuscenes-devkit unless regenerating labels
+        from nuscenes.utils import data_classes
+
+        V = self.view
+        M_inv = np.array(sample['pose_inverse'])
+        S = np.array([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 1],
+        ])
+
+        for a in annotations:
+            box = data_classes.Box(a['translation'], a['size'], Quaternion(a['rotation']))
+
+            corners = box.bottom_corners()                                              # 3 4
+            center = corners.mean(-1)                                                   # 3
+            front = (corners[:, 0] + corners[:, 1]) / 2.0                               # 3
+            left = (corners[:, 0] + corners[:, 3]) / 2.0                                # 3
+
+            p = np.concatenate((corners, np.stack((center, front, left), -1)), -1)      # 3 7
+            p = np.pad(p, ((0, 1), (0, 0)), constant_values=1.0)                        # 4 7
+            p = V @ S @ M_inv @ p                                                       # 3 7
+
+            yield p                                                                     # 3 7
+
+    def get_category_index(self, name, categories):
+        """
+        human.pedestrian.adult
+        """
+        tokens = name.split('.')
+
+        for i, category in enumerate(categories):
+            if category in tokens:
+                return i
+
+        return None
+
+    def get_annotations_by_category(self, sample, categories):
+        result = [[] for _ in categories]
+
+        for ann_token in self.nusc.get('sample', sample['token'])['anns']:
+            a = self.nusc.get('sample_annotation', ann_token)
+            idx = self.get_category_index(a['category_name'], categories)
+
+            if idx is not None:
+                result[idx].append(a)
+
+        return result
+
+    def get_line_layers(self, sample, layers, patch_radius=150, thickness=1):
+        h, w = self.bev_shape[:2]
+        V = self.view
+        M_inv = np.array(sample['pose_inverse'])
+        S = np.array([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 1],
+        ])
+
+        box_coords = (sample['pose'][0][-1] - patch_radius, sample['pose'][1][-1] - patch_radius,
+                      sample['pose'][0][-1] + patch_radius, sample['pose'][1][-1] + patch_radius)
+        records_in_patch = self.nusc_map.get_records_in_patch(box_coords, layers, 'intersect')
+
+        result = list()
+
+        for layer in layers:
+            render = np.zeros((h, w), dtype=np.uint8)
+
+            for r in records_in_patch[layer]:
+                polygon_token = self.nusc_map.get(layer, r)
+                line = self.nusc_map.extract_line(polygon_token['line_token'])
+
+                p = np.float32(line.xy)                                     # 2 n
+                p = np.pad(p, ((0, 1), (0, 0)), constant_values=0.0)        # 3 n
+                p = np.pad(p, ((0, 1), (0, 0)), constant_values=1.0)        # 4 n
+                p = V @ S @ M_inv @ p                                       # 3 n
+                p = p[:2].round().astype(np.int32).T                        # n 2
+
+                cv2.polylines(render, [p], False, 1, thickness=thickness)
+
+            result.append(render)
+
+        return 255 * np.stack(result, -1)
+
+    def get_static_layers(self, sample, layers, patch_radius=150):
+        h, w = self.bev_shape[:2]
+        V = self.view
+        M_inv = np.array(sample['pose_inverse'])
+        S = np.array([ 
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 1],
+        ])
+
+        box_coords = (sample['pose'][0][-1] - patch_radius, sample['pose'][1][-1] - patch_radius,
+                      sample['pose'][0][-1] + patch_radius, sample['pose'][1][-1] + patch_radius)
+        records_in_patch = self.nusc_map.get_records_in_patch(box_coords, layers, 'intersect')
+
+        result = list()
+
+        for layer in layers:
+            render = np.zeros((h, w), dtype=np.uint8)
+
+            for r in records_in_patch[layer]:
+                polygon_token = self.nusc_map.get(layer, r)
+
+                if layer == 'drivable_area': polygon_tokens = polygon_token['polygon_tokens']
+                else: polygon_tokens = [polygon_token['polygon_token']]
+
+                for p in polygon_tokens:
+                    polygon = self.nusc_map.extract_polygon(p)
+                    polygon = MultiPolygon([polygon])
+
+                    exteriors = [np.array(poly.exterior.coords).T for poly in polygon.geoms]
+                    exteriors = [np.pad(p, ((0, 1), (0, 0)), constant_values=0.0) for p in exteriors]
+                    exteriors = [np.pad(p, ((0, 1), (0, 0)), constant_values=1.0) for p in exteriors]
+                    exteriors = [V @ S @ M_inv @ p for p in exteriors]
+                    exteriors = [p[:2].round().astype(np.int32).T for p in exteriors]
+
+                    cv2.fillPoly(render, exteriors, 1, INTERPOLATION)
+
+                    interiors = [np.array(pi.coords).T for poly in polygon.geoms for pi in poly.interiors]
+                    interiors = [np.pad(p, ((0, 1), (0, 0)), constant_values=0.0) for p in interiors]
+                    interiors = [np.pad(p, ((0, 1), (0, 0)), constant_values=1.0) for p in interiors]
+                    interiors = [V @ S @ M_inv @ p for p in interiors]
+                    interiors = [p[:2].round().astype(np.int32).T for p in interiors]
+
+                    cv2.fillPoly(render, interiors, 0, INTERPOLATION)
+
+            result.append(render)
+
+        return 255 * np.stack(result, -1)
+
+    def get_dynamic_layers(self, sample, anns_by_category):
+        h, w = self.bev_shape[:2]
+        result = list()
+
+        for anns in anns_by_category:
+            render = np.zeros((h, w), dtype=np.uint8)
+
+            for p in self.convert_to_box(sample, anns):
+                p = p[:2, :4]
+
+                cv2.fillPoly(render, [p.round().astype(np.int32).T], 1, INTERPOLATION)
+
+            result.append(render)
+
+        return 255 * np.stack(result, -1)
 
     def __len__(self):
-        return len(self.file_name)
-
-    def get_file_list(self):
-        return self.file_name
+        return len(self.samples)
 
     def __getitem__(self, idx):
-        # read cemera k matrix from camera calibration files, day_dir is first 10 chat of file name
+        sample = self.samples[idx]
 
-        filename = self.file_name[idx]
-        # For input camera images, we iterate each `scene` folder
-        scene_dir   = self.filepath[37:49] # /scene-0001/
-        image_name  = self.filepath[49:]   #
+        # Raw annotations
+        anns_dynamic = self.get_annotations_by_category(sample, DYNAMIC)
+        anns_vehicle = self.get_annotations_by_category(sample, ['vehicle'])[0]
 
-        # =================== Load satellite map ========================
-        satmap_file_name = get_satmap_name(filename)
-        satmap_file_path = os.path.join(self.root, satmap_dir, scene_dir, satmap_file_name)
-        with Image.open(satmap_file_path, 'r') as satmap:
-            satmap = satmap.convert('RGB')
+        static = self.get_static_layers(sample, STATIC)                             # 200 200 2
+        dividers = self.get_line_layers(sample, DIVIDER)                            # 200 200 2
+        dynamic = self.get_dynamic_layers(sample, anns_dynamic)                     # 200 200 8
+        bev = np.concatenate((static, dividers, dynamic), -1)                       # 200 200 12
 
-        # =================== Load ground-view images ========================
+        assert bev.shape[2] == NUM_CLASSES
+
+        # Additional labels for vehicles only.
+        aux, visibility = self.get_dynamic_objects(sample, anns_vehicle)
+
+        # Package the data.
+        data = Sample(
+            view=self.view.tolist(),
+            bev=bev,
+            aux=aux,
+            visibility=visibility,
+            **sample
+        )
+        # if self.transform is not None:
+        #     data = self.transform(data) # enter __call__ in class SaveDataTransform in transform.py
+        # return data
+    
+        '''
+            1. Get 6 camera images => grd_images
+            2. Get satellite map using get_satmap(sample.images[0])
+            3. Get intrinsics from data.intrinsic
+            4. Get extrinsics from data.extrinsic
+            5. Get gt_shift_x, gt_shift_y, theta
+
+        '''
+
+        scene_name = sample['scene']
+        SAMPLES_PATH = '/home/goroyeh/nuScene_dataset/samples/'
+        SATMAP_PATH  = '/home/goroyeh/nuScene_dataset/satmap/' + scene_name + '/'
+
+
+        # load ground-view images
         grd_imgs = torch.tensor([])
+        grd_image_names = sample['images']
+        for image_filename in grd_image_names:
 
-        sensors = ['CAM_FRONT_LEFT', 'CAM_FRONT', 'CAM_FRONT_RIGHT',
-            'CAM_BACK_LEFT', 'CAM_BACK', 'CAM_BACK_RIGHT']
-        for sensor in sensors:
-            sensor_dir = sensor + '/'
-            image_name = get_image_name(filename)
-            image_path = os.path.join(self.root, samples_dir, scene_dir, sensor_dir, image_name)
-            with Image.open(image_path, 'r') as GrdImg:
-                grd_img_left = GrdImg.convert('RGB')
+            tmp = image_filename.split('/')
+            image_name = ''.join( tmp[-2]+'/'+tmp[-1] )
+            img_full_path = SAMPLES_PATH + scene_name + '/' + image_name
+            print(f'img_full_path: {img_full_path}')
+
+            with Image.open(img_full_path, 'r') as GrdImg:
+                grd_img = GrdImg.convert('RGB')
                 if self.grdimage_transform is not None:
-                    grd_img_left = self.grdimage_transform(grd_img_left)
-            grd_imgs = torch.cat([grd_imgs, grd_img_left.unsqueeze(0)], dim=0)
+                    grd_img = self.grdimage_transform(grd_img)
+            grd_imgs = torch.cat([grd_imgs, grd_img.unsqueeze(0)], dim=0)
 
+        intrinsics = torch.FloatTensor(sample['intrinsics'])
+        extrinsics = torch.FloatTensor(sample['extrinsics'])
 
-        # Load intrinsics of 6 cameras
+        sat_map_filename= SATMAP_PATH + get_satmap_name(grd_image_names[1])
+        if os.path.exists(sat_map_filename):
+            print(f'satmap: {sat_map_filename}')
+        with Image.open(sat_map_filename, 'r') as SatMap:
+            sat_map = SatMap.convert('RGB')
 
-        # Load extrinsics of 6 cameras
-
-
-        # goroyeh
-        # extrinsics = cam2imu @ imu2world (pose.txt)
-        # =================== read camera to imu transform for two front cams and left/right fishcams
-        cam2pose_file_name = os.path.join(self.root, calibration_dir, 'calib_cam_to_pose.txt') # From cam to GPS/IMU
-        cam2imus = []
-        with open(cam2pose_file_name, 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                items = line.split(':')
-                # print(f'read line: {line}')
-                values = items[1].strip().split(' ')
-                values = [float(val) for val in values]
-                
-                cam2imu = torch.tensor([
-                            [values[0],values[1],values[2], values[3]],
-                            [values[4],values[5],values[6], values[7]],
-                            [values[8],values[9],values[10], values[11]],
-                            [        0,       0,         0,         1]])
-                cam2imus.append(cam2imu)
-
-        imu2world_file_name = os.path.join(self.root, pose_dir, drive_dir, 'poses.txt')
-        # Get pose.txt raw[idx]
-        with open(imu2world_file_name, 'r') as f:
-            lines = f.readlines()
-            target_row = lines[idx]
-            values = target_row.strip().split(' ')
-            values = [float(val) for val in values]
-            # print(f'target_row {target_row}')
-  
-            imu2world_matrix = torch.tensor([
-                [values[1], values[2], values[3], values[4]],
-                [values[5], values[6], values[7], values[8]],
-                [values[9], values[10], values[11], values[12]],
-                [       0,         0,         0,            1]
-            ])
-
-        extrinsics = torch.zeros([4,4,4]) # Goal: (4, 4, 4) 4 cameras, (4x4)
-        for i, cam2imu in  enumerate(cam2imus):
-            extrinsic = cam2imu @ imu2world_matrix
-            extrinsics[i,:,:] = extrinsic
-            # print(f'extrinsics: {extrinsic}')
-
-        # =================== read camera intrinsice for left and right perspective cameras ====================
-        calib_file_name = os.path.join(self.root, calibration_dir, 'perspective.txt')
-        intrinsics_dict = {}
-        with open(calib_file_name, 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                # print("line = ", line)
-                # left color camera k matrix
-                if 'P_rect_00' in line:
-                    # get 3*3 matrix from P_rect_**:
-                    items = line.split(':')
-                    valus = items[1].strip().split(' ')
-                    fx = float(valus[0]) * GrdImg_W / GrdOriImg_W
-                    cx = float(valus[2]) * GrdImg_W / GrdOriImg_W
-                    fy = float(valus[5]) * GrdImg_H / GrdOriImg_H
-                    cy = float(valus[6]) * GrdImg_H / GrdOriImg_H
-                    left_camera_k = [[fx, 0, cx], [0, fy, cy], [0, 0, 1]]
-                    intrinsics_dict['pcam0'] = torch.from_numpy(np.asarray(left_camera_k, dtype=np.float32))
-                    # if not self.stereo:
-
-                    # print("left_camera_k = ", left_camera_k)
-                    
-                if 'P_rect_01' in line:
-                    # get 3*3 matrix from P_rect_**:
-                    items = line.split(':')
-                    valus = items[1].strip().split(' ')
-                    fx = float(valus[0]) * GrdImg_W / GrdOriImg_W
-                    cx = float(valus[2]) * GrdImg_W / GrdOriImg_W
-                    fy = float(valus[5]) * GrdImg_H / GrdOriImg_H
-                    cy = float(valus[6]) * GrdImg_H / GrdOriImg_H
-                    right_camera_k = [[fx, 0, cx], [0, fy, cy], [0, 0, 1]]
-                    intrinsics_dict['pcam1'] = torch.from_numpy(np.asarray(right_camera_k, dtype=np.float32))
-                    # if not self.stereo:
-
-                    # print("left_camera_k = ", left_camera_k)
-                    break                
-
-        # =================== read camera intrinsics_dict for left and right fisheye cameras ====================
-        image02_file_name = os.path.join(self.root, calibration_dir, 'image_02.yaml')
-        intrinsics_dict['fcam2'] = load_fisheye_intrinsics_dict( image02_file_name)
-
-        image03_file_name = os.path.join(self.root, calibration_dir, 'image_03.yaml')
-        intrinsics_dict['fcam3'] = load_fisheye_intrinsics_dict( image03_file_name)
-
-        # =================== initialize some required variables ============================
-
-
+        yaw = sample['yaw']
+        heading = yaw
+        heading = torch.from_numpy(np.asarray(heading))
+        
         sat_rot = sat_map.rotate(-heading / np.pi * 180)
         sat_align_cam = sat_rot.transform(sat_rot.size, Image.AFFINE,
                                           (1, 0, utils.CameraGPS_shift_left[0] / self.meter_per_pixel,
@@ -273,398 +576,34 @@ class SatGrdDataset(Dataset):
         if self.satmap_transform is not None:
             sat_map = self.satmap_transform(sat_map)
 
-
+        print(f'type(intrinscis) {type(intrinsics)}')
+        print(f'type(ext) {type(extrinsics)}')
+        print(f'type(grd_imgs) {type(grd_imgs)}')
+        print(f'type(sat_map) {type(sat_map)}')
 
         # grd_left_imgs[0] : shape (3, 256, 1024) (C, H, W)
-        return sat_map, grd_imgs, extrinsics, \
+        return sat_map, grd_imgs, intrinsics, extrinsics, \
                torch.tensor(-gt_shift_x, dtype=torch.float32).reshape(1), \
                torch.tensor(-gt_shift_y, dtype=torch.float32).reshape(1), \
                torch.tensor(theta, dtype=torch.float32).reshape(1), \
-               intrinsics_dict, \
-               file_name
+            #    file_name
 
-        return sat_map, grd_imgs, extrinsics, \
-               torch.tensor(-gt_shift_x, dtype=torch.float32).reshape(1), \
-               torch.tensor(-gt_shift_y, dtype=torch.float32).reshape(1), \
-               torch.tensor(theta, dtype=torch.float32).reshape(1), \
-               intrinsics_dict, \
-               file_name
 
 
+# root_dir = '/mnt/workspace/datasets/kitti-360-SLAM' # '../../data/Kitti' # '../Data' #'..\\Data' #
+root_dir = '/home/goroyeh/nuScene_dataset'
+# samples_dir = '/samples'
+# satmap_dir = '/satmap'
 
-class SatGrdDatasetTest(Dataset):
-    def __init__(self, root, file,
-                 transform=None, shift_range_lat=20, shift_range_lon=20, rotation_range=10):
-        self.root = root
+GrdImg_H = 256
+GrdImg_W = 1024
+GrdOriImg_H = 376
+GrdOriImg_W = 1408
+train_file = '../../../dataLoader/nuscenes_train.txt'
+test_file = '../../../dataLoader/nuscenes_test.txt'
 
-        self.meter_per_pixel = utils.get_meter_per_pixel(scale=1)
-        self.shift_range_meters_lat = shift_range_lat  # in terms of meters
-        self.shift_range_meters_lon = shift_range_lon  # in terms of meters
-        self.shift_range_pixels_lat = shift_range_lat / self.meter_per_pixel  # shift range is in terms of meters
-        self.shift_range_pixels_lon = shift_range_lon / self.meter_per_pixel  # shift range is in terms of meters
-
-        # self.shift_range_meters = shift_range  # in terms of meters
-
-        self.rotation_range = rotation_range  # in terms of degree
-
-        self.skip_in_seq = 2  # skip 2 in sequence: 6,3,1~
-        if transform != None:
-            self.satmap_transform = transform[0]
-            self.grdimage_transform = transform[1]
-
-        self.pro_grdimage_dir = 'raw_data'
-
-        self.satmap_dir = satmap_dir
-
-        with open(file, 'r') as f:
-            file_name = f.readlines()
-        self.file_name = [file[:-1] for file in file_name]
-
-    def __len__(self):
-        return len(self.file_name)
-
-    def get_file_list(self):
-        return self.file_name
-
-    def __getitem__(self, idx):
-        # read cemera k matrix from camera calibration files, day_dir is first 10 chat of file name
-
-        line = self.file_name[idx]
-        file_name, gt_shift_x, gt_shift_y, theta = line.split(' ')
-        drive_dir = file_name[:26]
-        image_no = file_name[46:]
-        # print("drive_dir = ", drive_dir)
-        # print("image_no = ", image_no)
-
-
-        # extrinsics = cam2imu @ imu2world (pose.txt)
-        # =================== read camera to imu transform for two front cams and left/right fishcams
-        cam2pose_file_name = os.path.join(self.root, calibration_dir, 'calib_cam_to_pose.txt') # From cam to GPS/IMU
-        cam2imus = []
-        with open(cam2pose_file_name, 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                items = line.split(':')
-                # print(f'read line: {line}')
-                values = items[1].strip().split(' ')
-                values = [float(val) for val in values]
-                
-                cam2imu = torch.tensor([
-                            [values[0],values[1],values[2], values[3]],
-                            [values[4],values[5],values[6], values[7]],
-                            [values[8],values[9],values[10], values[11]],
-                            [        0,       0,         0,         1]])
-                cam2imus.append(cam2imu)
-
-        imu2world_file_name = os.path.join(self.root, pose_dir, drive_dir, 'poses.txt')
-        # Get pose.txt raw[idx]
-        with open(imu2world_file_name, 'r') as f:
-            lines = f.readlines()
-            target_row = lines[idx]
-            values = target_row.strip().split(' ')
-            values = [float(val) for val in values]
-            # print(f'target_row {target_row}')
-  
-            imu2world_matrix = torch.tensor([
-                [values[1], values[2], values[3], values[4]],
-                [values[5], values[6], values[7], values[8]],
-                [values[9], values[10], values[11], values[12]],
-                [       0,         0,         0,            1]
-            ])
-
-        extrinsics = torch.zeros([4,4,4]) # Goal: (4, 4, 4) 4 cameras, (4x4)
-        for i, cam2imu in  enumerate(cam2imus):
-            extrinsic = cam2imu @ imu2world_matrix
-            extrinsics[i,:,:] = extrinsic
-            # print(f'extrinsics: {extrinsic}')
-
-        # =================== read camera intrinsice for left and right perspective cameras ====================
-        calib_file_name = os.path.join(self.root, calibration_dir, 'perspective.txt')
-        intrinsics_dict = {}
-        with open(calib_file_name, 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                # print("line = ", line)
-                # left color camera k matrix
-                if 'P_rect_00' in line:
-                    # get 3*3 matrix from P_rect_**:
-                    items = line.split(':')
-                    valus = items[1].strip().split(' ')
-                    fx = float(valus[0]) * GrdImg_W / GrdOriImg_W
-                    cx = float(valus[2]) * GrdImg_W / GrdOriImg_W
-                    fy = float(valus[5]) * GrdImg_H / GrdOriImg_H
-                    cy = float(valus[6]) * GrdImg_H / GrdOriImg_H
-                    left_camera_k = [[fx, 0, cx], [0, fy, cy], [0, 0, 1]]
-                    intrinsics_dict['pcam0'] = torch.from_numpy(np.asarray(left_camera_k, dtype=np.float32))
-                    # if not self.stereo:
-
-                    # print("left_camera_k = ", left_camera_k)
-                    
-                if 'P_rect_01' in line:
-                    # get 3*3 matrix from P_rect_**:
-                    items = line.split(':')
-                    valus = items[1].strip().split(' ')
-                    fx = float(valus[0]) * GrdImg_W / GrdOriImg_W
-                    cx = float(valus[2]) * GrdImg_W / GrdOriImg_W
-                    fy = float(valus[5]) * GrdImg_H / GrdOriImg_H
-                    cy = float(valus[6]) * GrdImg_H / GrdOriImg_H
-                    right_camera_k = [[fx, 0, cx], [0, fy, cy], [0, 0, 1]]
-                    intrinsics_dict['pcam1'] = torch.from_numpy(np.asarray(right_camera_k, dtype=np.float32))
-                    # if not self.stereo:
-
-                    # print("left_camera_k = ", left_camera_k)
-                    break                
-
-        # =================== read camera intrinsics_dict for left and right fisheye cameras ====================
-        image02_file_name = os.path.join(self.root, calibration_dir, 'image_02.yaml')
-        intrinsics_dict['fcam2'] = load_fisheye_intrinsics_dict( image02_file_name)
-
-        image03_file_name = os.path.join(self.root, calibration_dir, 'image_03.yaml')
-        intrinsics_dict['fcam3'] = load_fisheye_intrinsics_dict( image03_file_name)
-
-        # =================== read satellite map ===================================
-        SatMap_name = os.path.join(self.root, self.satmap_dir, drive_dir, image_no.lower())
-        with Image.open(SatMap_name, 'r') as SatMap:
-            sat_map = SatMap.convert('RGB')
-
-        # =================== read ground-view images ========================
-        grd_imgs = torch.tensor([])
-
-        # oxt: such as 0000000000.txt
-        oxts_file_name = os.path.join(self.root, pose_dir, drive_dir, oxts_dir,
-                                      image_no.lower().replace('.png', '.txt'))
-        with open(oxts_file_name, 'r') as f:
-                content = f.readline().split(' ')
-                # get heading
-                heading = float(content[5])
-                heading = torch.from_numpy(np.asarray(heading))
-
-                perspective_left_img_name = os.path.join(self.root, grdimage_dir, drive_dir, perspective_left_color_camera_dir,
-                                             image_no.lower())
-                with Image.open(perspective_left_img_name, 'r') as GrdImg:
-                    grd_img_left = GrdImg.convert('RGB')
-                    if self.grdimage_transform is not None:
-                        grd_img_left = self.grdimage_transform(grd_img_left)
-                grd_imgs = torch.cat([grd_imgs, grd_img_left.unsqueeze(0)], dim=0)
-
-
-                perspective_right_img_name = os.path.join(self.root, grdimage_dir, drive_dir, perspective_right_color_camera_dir,
-                                             image_no.lower())
-                with Image.open(perspective_right_img_name, 'r') as GrdImg:
-                    grd_img_right = GrdImg.convert('RGB')
-                    if self.grdimage_transform is not None:
-                        grd_img_right = self.grdimage_transform(grd_img_right)
-                grd_imgs = torch.cat([grd_imgs, grd_img_right.unsqueeze(0)], dim=0)
-
-
-                fisheye_left_img_name = os.path.join(self.root, grdimage_dir, drive_dir, fisheye_left_color_camera_dir,
-                                             image_no.lower())
-                with Image.open(fisheye_left_img_name, 'r') as GrdImg:
-                    fisheye_left_img = GrdImg.convert('RGB')
-                    if self.grdimage_transform is not None:
-                        fisheye_left_img = self.grdimage_transform(fisheye_left_img)
-                grd_imgs = torch.cat([grd_imgs, fisheye_left_img.unsqueeze(0)], dim=0)
-
-
-                fisheye_right_img_name = os.path.join(self.root, grdimage_dir, drive_dir, fisheye_right_color_camera_dir,
-                                             image_no.lower())
-                with Image.open(fisheye_right_img_name, 'r') as GrdImg:
-                    fisheye_right_img = GrdImg.convert('RGB')
-                    if self.grdimage_transform is not None:
-                        fisheye_right_img = self.grdimage_transform(fisheye_right_img)
-                grd_imgs = torch.cat([grd_imgs, fisheye_right_img.unsqueeze(0)], dim=0)
-
-        sat_rot = sat_map.rotate(-heading / np.pi * 180)
-        sat_align_cam = sat_rot.transform(sat_rot.size, Image.AFFINE,
-                                          (1, 0, utils.CameraGPS_shift_left[0] / self.meter_per_pixel,
-                                           0, 1, utils.CameraGPS_shift_left[1] / self.meter_per_pixel),
-                                          resample=Image.BILINEAR)
-        # the homography is defined on: from target pixel to source pixel
-        # now east direction is the real vehicle heading direction
-
-        # randomly generate shift
-        # gt_shift_x = np.random.uniform(-1, 1)  # --> right as positive, parallel to the heading direction
-        # gt_shift_y = np.random.uniform(-1, 1)  # --> up as positive, vertical to the heading direction
-        gt_shift_x = -float(gt_shift_x)  # --> right as positive, parallel to the heading direction
-        gt_shift_y = -float(gt_shift_y)  # --> up as positive, vertical to the heading direction
-
-        sat_rand_shift = \
-            sat_align_cam.transform(
-                sat_align_cam.size, Image.AFFINE,
-                (1, 0, gt_shift_x * self.shift_range_pixels_lon,
-                 0, 1, -gt_shift_y * self.shift_range_pixels_lat),
-                resample=Image.BILINEAR)
-
-        # randomly generate roation
-        # theta = np.random.uniform(-1, 1)
-        theta = float(theta)
-        sat_rand_shift_rand_rot = \
-            sat_rand_shift.rotate(theta * self.rotation_range)
-
-        sat_map = TF.center_crop(sat_rand_shift_rand_rot, utils.SatMap_process_sidelength)
-        # sat_map = np.array(sat_map, dtype=np.float32)
-
-        # transform
-        if self.satmap_transform is not None:
-            sat_map = self.satmap_transform(sat_map)
-
-        return sat_map, grd_imgs, extrinsics, \
-               torch.tensor(-gt_shift_x, dtype=torch.float32).reshape(1), \
-               torch.tensor(-gt_shift_y, dtype=torch.float32).reshape(1), \
-               torch.tensor(theta, dtype=torch.float32).reshape(1), \
-               intrinsics_dict, \
-               file_name
-        # return sat_map, left_camera_k, grd_left_imgs[0], \
-        #        torch.tensor(-gt_shift_x, dtype=torch.float32).reshape(1), \
-        #        torch.tensor(-gt_shift_y, dtype=torch.float32).reshape(1), \
-        #        torch.tensor(theta, dtype=torch.float32).reshape(1), \
-        #        file_name
-
-
-class SatGrdDatasetLocalize(Dataset):
-    def __init__(self, root, file,
-                 transform=None, shift_range_lat=20, shift_range_lon=20, rotation_range=10):
-        self.root = root
-
-        self.meter_per_pixel = utils.get_meter_per_pixel(scale=1)
-        self.shift_range_meters_lat = shift_range_lat  # in terms of meters
-        self.shift_range_meters_lon = shift_range_lon  # in terms of meters
-        self.shift_range_pixels_lat = shift_range_lat / self.meter_per_pixel  # shift range is in terms of meters
-        self.shift_range_pixels_lon = shift_range_lon / self.meter_per_pixel  # shift range is in terms of meters
-
-        # self.shift_range_meters = shift_range  # in terms of meters
-
-        self.rotation_range = rotation_range  # in terms of degree
-
-        self.skip_in_seq = 2  # skip 2 in sequence: 6,3,1~
-        if transform != None:
-            self.satmap_transform = transform[0]
-            self.grdimage_transform = transform[1]
-
-        self.pro_grdimage_dir = 'raw_data'
-
-        self.satmap_dir = satmap_dir
-
-        with open(file, 'r') as f:
-            file_name = f.readlines()
-        self.file_name = [file[:-1] for file in file_name]
-
-    def __len__(self):
-        return len(self.file_name)
-
-    def get_file_list(self):
-        return self.file_name
-
-    def __getitem__(self, idx):
-        '''
-        For the localize dataset, we return ground img at t and satellite img at t + 1
-        '''
-        # read cemera k matrix from camera calibration files, day_dir is first 10 chat of file name
-
-        line = self.file_name[idx]
-        file_name, gt_shift_x, gt_shift_y, theta = line.split(' ')
-        drive_dir = file_name[:26]
-        image_no = file_name[46:]
-        image_no_next = f"{int(image_no[:-4])+1:010}" + ".png"
-
-        # # Check image_no
-        # print("image_no = ", image_no)
-        # image_no_next = f"{int(image_no[:-4])+1:010}" + ".png"
-        # print("image_no + 1 = ", image_no_next)
-
-        # =================== read camera intrinsice for left and right cameras ====================
-        calib_file_name = os.path.join(self.root, calibration_dir, 'perspective.txt')
-        with open(calib_file_name, 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                # left color camera k matrix
-                if 'P_rect_00' in line:
-                    # get 3*3 matrix from P_rect_**:
-                    items = line.split(':')
-                    valus = items[1].strip().split(' ')
-                    fx = float(valus[0]) * GrdImg_W / GrdOriImg_W
-                    cx = float(valus[2]) * GrdImg_W / GrdOriImg_W
-                    fy = float(valus[5]) * GrdImg_H / GrdOriImg_H
-                    cy = float(valus[6]) * GrdImg_H / GrdOriImg_H
-                    left_camera_k = [[fx, 0, cx], [0, fy, cy], [0, 0, 1]]
-                    left_camera_k = torch.from_numpy(np.asarray(left_camera_k, dtype=np.float32))
-                    # if not self.stereo:
-                    break
-
-        # =================== read satellite map ===================================
-        SatMap_name = os.path.join(self.root, self.satmap_dir, drive_dir, image_no_next.lower())
-        with Image.open(SatMap_name, 'r') as SatMap:
-            sat_map = SatMap.convert('RGB')
-
-        # =================== initialize some required variables ============================
-        grd_left_imgs = torch.tensor([])
-
-        # oxt: such as 0000000000.txt
-        # Use the next image since heading is applied to satellite image (t + 1)
-        oxts_file_name = os.path.join(self.root, pose_dir, drive_dir, oxts_dir,
-                                      image_no_next.lower().replace('.png', '.txt'))
-        with open(oxts_file_name, 'r') as f:
-            content = f.readline().split(' ')
-            # get heading
-            heading = float(content[5])
-            heading = torch.from_numpy(np.asarray(heading))
-
-            left_img_name = os.path.join(self.root, grdimage_dir, drive_dir, left_color_camera_dir,
-                                         image_no.lower())
-            with Image.open(left_img_name, 'r') as GrdImg:
-                grd_img_left = GrdImg.convert('RGB')
-                if self.grdimage_transform is not None:
-                    grd_img_left = self.grdimage_transform(grd_img_left)
-
-            grd_left_imgs = torch.cat([grd_left_imgs, grd_img_left.unsqueeze(0)], dim=0)
-
-        sat_rot = sat_map.rotate(-heading / np.pi * 180)
-        sat_align_cam = sat_rot.transform(sat_rot.size, Image.AFFINE,
-                                          (1, 0, utils.CameraGPS_shift_left[0] / self.meter_per_pixel,
-                                           0, 1, utils.CameraGPS_shift_left[1] / self.meter_per_pixel),
-                                          resample=Image.BILINEAR)
-        # the homography is defined on: from target pixel to source pixel
-        # now east direction is the real vehicle heading direction
-
-        # randomly generate shift
-        # gt_shift_x = np.random.uniform(-1, 1)  # --> right as positive, parallel to the heading direction
-        # gt_shift_y = np.random.uniform(-1, 1)  # --> up as positive, vertical to the heading direction
-
-        # leekt: Here I ignored to ground truth shift since we will localize using the ground image from the previous timestamp
-        # gt_shift_x = -float(gt_shift_x)  # --> right as positive, parallel to the heading direction
-        # gt_shift_y = -float(gt_shift_y)  # --> up as positive, vertical to the heading direction
-
-        # sat_rand_shift = \
-        #     sat_align_cam.transform(
-        #         sat_align_cam.size, Image.AFFINE,
-        #         (1, 0, gt_shift_x * self.shift_range_pixels_lon,
-        #          0, 1, -gt_shift_y * self.shift_range_pixels_lat),
-        #         resample=Image.BILINEAR)
-
-        # # randomly generate roation
-        # # theta = np.random.uniform(-1, 1)
-
-        # theta = float(theta)
-        # sat_rand_shift_rand_rot = \
-        #     sat_rand_shift.rotate(theta * self.rotation_range)
-
-        # sat_map = TF.center_crop(sat_rand_shift_rand_rot, utils.SatMap_process_sidelength)
-        # # sat_map = np.array(sat_map, dtype=np.float32)
-
-        # transform
-        if self.satmap_transform is not None:
-            sat_map = self.satmap_transform(sat_map)
-
-        return sat_map, left_camera_k, grd_left_imgs[0]
+def load_train_data(dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat=20, shift_range_lon=20, rotation_range=10):
     
-        # return sat_map, left_camera_k, grd_left_imgs[0], \
-        #        torch.tensor(-gt_shift_x, dtype=torch.float32).reshape(1), \
-        #        torch.tensor(-gt_shift_y, dtype=torch.float32).reshape(1), \
-        #        torch.tensor(theta, dtype=torch.float32).reshape(1), \
-        #        file_name
-    
-
-def load_train_data(batch_size, shift_range_lat=20, shift_range_lon=20, rotation_range=10):
     SatMap_process_sidelength = utils.get_process_satmap_sidelength()
 
     satmap_transform = transforms.Compose([
@@ -679,116 +618,23 @@ def load_train_data(batch_size, shift_range_lat=20, shift_range_lon=20, rotation
         transforms.Resize(size=[Grd_h, Grd_w]),
         transforms.ToTensor(),
     ])
+    
+    
+    train_loader = get_split_data(dataset_dir="/home/goroyeh/nuScene_dataset/media/datasets/nuscenes",
+                             labels_dir="/home/goroyeh/nuScene_dataset/media/datasets/cvt_labels_nuscenes", 
+                             transform=(satmap_transform, grdimage_transform),
+                             shift_range_lat=20, shift_range_lon=20, rotation_range=10,
+                             split='train', 
+                             loader_config = {},
+                             loader=True, 
+                             shuffle=False)
 
-    # cwd = os.getcwd()
 
-    # # Print the current working directory
-    # print("Current working directory: {0}".format(cwd))  
-    # /home/goroyeh/Yujiao/leekt/HighlyAccurate/outputs/2023-02-21/16-09-48
 
-    train_set = SatGrdDataset(root=root_dir, file=train_file,
-                              transform=(satmap_transform, grdimage_transform),
-                              shift_range_lat=shift_range_lat,
-                              shift_range_lon=shift_range_lon,
-                              rotation_range=rotation_range)
-
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True,
-                              num_workers=num_thread_workers, drop_last=False)
     return train_loader
 
 
-def load_test_data(batch_size, shift_range_lat=20, shift_range_lon=20, rotation_range=10):
-    SatMap_process_sidelength = utils.get_process_satmap_sidelength()
-
-    satmap_transform = transforms.Compose([
-        transforms.Resize(size=[SatMap_process_sidelength, SatMap_process_sidelength]),
-        transforms.ToTensor(),
-    ])
-
-    Grd_h = GrdImg_H
-    Grd_w = GrdImg_W
-
-    grdimage_transform = transforms.Compose([
-        transforms.Resize(size=[Grd_h, Grd_w]),
-        transforms.ToTensor(),
-    ])
-
-    # # Plz keep the following two lines!!! These are for fair test comparison.
-    # np.random.seed(2022)
-    # torch.manual_seed(2022)
-
-    test1_set = SatGrdDatasetTest(root=root_dir, file=test_file,
-                            transform=(satmap_transform, grdimage_transform),
-                            shift_range_lat=shift_range_lat,
-                            shift_range_lon=shift_range_lon,
-                            rotation_range=rotation_range)
-
-    test1_loader = DataLoader(test1_set, batch_size=batch_size, shuffle=False, pin_memory=True,
-                            num_workers=num_thread_workers, drop_last=False)
-    return test1_loader
-
-
-# def load_test2_data(batch_size, shift_range_lat=20, shift_range_lon=20, rotation_range=10):
-#     SatMap_process_sidelength = utils.get_process_satmap_sidelength()
-
-#     satmap_transform = transforms.Compose([
-#         transforms.Resize(size=[SatMap_process_sidelength, SatMap_process_sidelength]),
-#         transforms.ToTensor(),
-#     ])
-
-#     Grd_h = GrdImg_H
-#     Grd_w = GrdImg_W
-
-#     grdimage_transform = transforms.Compose([
-#         transforms.Resize(size=[Grd_h, Grd_w]),
-#         transforms.ToTensor(),
-#     ])
-
-#     # # Plz keep the following two lines!!! These are for fair test comparison.
-#     # np.random.seed(2022)
-#     # torch.manual_seed(2022)
-
-#     test2_set = SatGrdDatasetTest(root=root_dir, file=test2_file,
-#                               transform=(satmap_transform, grdimage_transform),
-#                               shift_range_lat=shift_range_lat,
-#                               shift_range_lon=shift_range_lon,
-#                               rotation_range=rotation_range)
-
-#     test2_loader = DataLoader(test2_set, batch_size=batch_size, shuffle=False, pin_memory=True,
-#                               num_workers=num_thread_workers, drop_last=False)
-#     return test2_loader
-
-def load_localize_data(batch_size, shift_range_lat=20, shift_range_lon=20, rotation_range=10):
-    SatMap_process_sidelength = utils.get_process_satmap_sidelength()
-
-    satmap_transform = transforms.Compose([
-        transforms.Resize(size=[SatMap_process_sidelength, SatMap_process_sidelength]),
-        transforms.ToTensor(),
-    ])
-
-    Grd_h = GrdImg_H
-    Grd_w = GrdImg_W
-
-    grdimage_transform = transforms.Compose([
-        transforms.Resize(size=[Grd_h, Grd_w]),
-        transforms.ToTensor(),
-    ])
-
-    # # Plz keep the following two lines!!! These are for fair test comparison.
-    # np.random.seed(2022)
-    # torch.manual_seed(2022)
-
-    localize_set = SatGrdDatasetLocalize(root=root_dir, file=test_file,
-                            transform=(satmap_transform, grdimage_transform),
-                            shift_range_lat=shift_range_lat,
-                            shift_range_lon=shift_range_lon,
-                            rotation_range=rotation_range)
-
-    localize_loader = DataLoader(localize_set, batch_size=batch_size, shuffle=False, pin_memory=True,
-                            num_workers=num_thread_workers, drop_last=False)
-    return localize_loader
-
-
-
-
+def load_val_data(dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat=20, shift_range_lon=20, rotation_range=10):
+    val_loader = get_split_data(dataset_dir, labels_dir, split='val', loader_config={}, loader=True, shuffle=False)
+    return val_loader
 

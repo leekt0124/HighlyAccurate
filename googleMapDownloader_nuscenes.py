@@ -424,11 +424,6 @@ def main():
                     # zoom-level
                     # 0: whole world i
                     # 1: 1/2 world
-
-                    # if i==0:
-                    #     lat, long = INIT_LAT, INIT_LONG
-                    # elif i==39:
-                    #     lat, long = INIT_LAT+30, INIT_LONG+30
                     # ------- Query satmap from Google Map -------- #
                     gmd = GoogleMapDownloader(lat, long, int(sys.argv[1]), GoogleMapsLayers.SATELLITE)
                     # print("The tile coordinates are {}".format(gmd.getXY()))

@@ -48,3 +48,15 @@ beta2: 0.999
 
 use_default_model: 0
 use_transformer: True
+
+# For nuscenes_dataset.py
+# TODO: Change labels to my satmap!
+dataset_dir: "/home/goroyeh/nuScene_dataset/media/datasets/nuscenes"
+labels_dir : "/home/goroyeh/nuScene_dataset/media/datasets/cvt_labels_nuscenes"
+
+
+loader:
+  batch_size: 4
+  num_workers: 4
+  pin_memory: True
+  prefetch_factor: 45

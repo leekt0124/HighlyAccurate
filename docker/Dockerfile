@@ -22,6 +22,12 @@ RUN pip install wandb==0.12.11
 RUN pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0 --extra-index-url https://download.pytorch.org/whl/cu113
 RUN pip install torchtext==0.12.0
 
+# For cv2
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1 \
+        libglib2.0-0 \
+# Nuscene
+RUN pip install nuscenes-devkit
 
 # scipy, tensorboard
 # RUN pip install scipy
