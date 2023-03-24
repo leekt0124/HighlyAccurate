@@ -389,8 +389,11 @@ class GeometryKernelAttention(nn.Module):
 
         # 1 1 3 h w
         image_plane = generate_grid(feat_height, feat_width)[None]
+        print(f'image_width {image_width}  image_height {image_height}')
         image_plane[:, :, 0] *= image_width
         image_plane[:, :, 1] *= image_height
+
+        print(image_plane.shape) # (1, 1, 3, 56, 120) (1, 1, 3, 14, 30) -> 
 
         self.register_buffer('image_plane', image_plane, persistent=False)
 
@@ -454,6 +457,7 @@ class GeometryKernelAttention(nn.Module):
         # b n 3 h w
         pixel = self.image_plane
         _, _, _, h, w = pixel.shape
+        print(f'pixel.shape {pixel.shape}') # (1, 1, 3, 56, 120) Want: (1, 1, 3, 64, 256)
 
         # b n 4 1
         c = E_inv[..., -1:]
@@ -463,14 +467,19 @@ class GeometryKernelAttention(nn.Module):
         c_embed = self.cam_embed(c_flat)
 
         # 1 1 3 (h w)
-        pixel_flat = rearrange(pixel, '... h w -> ... (h w)')
+        pixel_flat = rearrange(pixel, '... h w -> ... (h w)') # (1, 1, 3, 6720)
         # b n 3 (h w)
-        cam = I_inv @ pixel_flat
+        print(f'I_inv.shape {I_inv.shape}')            # (1, 6, 3, 3)
+        print(f'pixel_flat.shape {pixel_flat.shape}')  # (1, 1, 3, 6720) Problem! Should be (1, 1, 3, (64, 256)) the h has problem!
+        cam = I_inv @ pixel_flat  # (1, 6, 3, 6720) 
         cam = F.pad(cam, (0, 0, 0, 1, 0, 0, 0, 0), value=1)
         # b n 4 (h w)
-        d = E_inv @ cam
+        print(f'E_inv.shape {E_inv.shape}')    # (1, 6, 4, 4)
+        print(f'cam.shape {cam.shape}')        # (1, 6, 4, 6720)
+        d = E_inv @ cam   #  (1, 6, 4, 6720)
         # (b n) 4 h w
-        d_flat = rearrange(d, 'b n d (h w) -> (b n) d h w', h=h, w=w)
+        d_flat = rearrange(d, 'b n d (h w) -> (b n) d h w', h=h, w=w) #  (1, 6,  4, 56, 120) -> ( 6,  4, 56, 120)
+        print(f'd.shape {d.shape}') # [1,6,4,6720]
 
         # 2 H W
         world = bev.grid[:2]
@@ -483,6 +492,8 @@ class GeometryKernelAttention(nn.Module):
         # b n d H W
         query_pos = rearrange(bev_embed, '(b n) ... -> b n ...', b=b, n=n)
 
+        print(f'feature.shape {feature.shape}') # 1,6,32,64,256
+        
         # (b n) d h w
         feature_flat = rearrange(feature, 'b n ... -> (b n) ...')
 
@@ -490,6 +501,9 @@ class GeometryKernelAttention(nn.Module):
         # project local patches using sampling
         # concat feature and embeddings for sampling
         d_feature = feature_flat.shape[1]
+
+        print(f'feat_flat.shape {feature_flat.shape}') # 6, 32, 64, 256
+        print(f'd_flat.shape {d_flat.shape}')          # 6,  4, 56, 120
         feature_embed = torch.cat([feature_flat, d_flat], dim=1)
         feature_embed, mask = self.sampling(
             bev.grid.detach().clone(), feature_embed, I_, E_)
@@ -555,6 +569,10 @@ class GeometryKernelEncoder(nn.Module):
             _, feat_dim, feat_height, feat_width = self.down(
                 torch.zeros(feat_shape)).shape
 
+            print(f'feat_height, {feat_height}, feat_width {feat_width}') # 56, 120 => This is the issue!
+
+            # Should be (64, 256) and ()
+
             cva = GeometryKernelAttention(
                 feat_height, feat_width, feat_dim, dim, **cross_view)
             cross_views.append(cva)
@@ -570,6 +588,34 @@ class GeometryKernelEncoder(nn.Module):
     def forward(self, batch):
         b, n, _, _, _ = batch['image'].shape
 
+        """
+        train_nuscenes
+        grd_imgs [1, 6, 3, 256, 1024]  # Should be 224, 480!
+        intrinsics [1, 6, 3, 3]
+        extrinsics [1, 6, 4, 4]
+        feature[0] [6, 32, 64, 256]
+        feature[1] [6, 112, 16, 64]
+
+       
+        GKT:
+        Grd Img shape: torch.Size([4, 6, 3, 224, 480])
+        intrinsics shape: torch.Size([4, 6, 3, 3])
+        extrinsics shape: torch.Size([4, 6, 4, 4])        
+        b, n = 4, 6
+        b: batch
+        n: number of cameras
+        c,h,w
+        
+        len(features): 2
+        features[0].shape torch.Size([24, 32, 56, 120])
+        features[1].shape torch.Size([24, 112, 14, 30])
+
+        """
+        # print(f'batch[image].shape {batch["image"].shape}')
+        # print(f'batch[intrinsics].shape {batch["intrinsics"].shape}')
+        # print(f'batch[extrinsics].shape {batch["extrinsics"].shape}')
+
+
         # b n c h w
         image = batch['image'].flatten(0, 1)
         # b n 3 3
@@ -577,34 +623,12 @@ class GeometryKernelEncoder(nn.Module):
         # b n 4 4
         E_inv = batch['extrinsics'].inverse()     
 
-        # print(f'Grd Img shape: {batch["image"].shape}' )
-        # print(f'intrinsics shape: {batch["intrinsics"].shape}' )
-        # print(f'extrinsics shape: {batch["extrinsics"].shape}' )
-
-        """
-        Grd Img shape: torch.Size([4, 6, 3, 224, 480])
-        intrinsics shape: torch.Size([4, 6, 3, 3])
-        extrinsics shape: torch.Size([4, 6, 4, 4])        
-
-        b, n = 4, 6
-        b: batch
-        n: number of cameras
-        c,h,w
-        
-
-        len(features): 2
-        features[0].shape torch.Size([24, 32, 56, 120])
-        features[1].shape torch.Size([24, 112, 14, 30])
-
-        """
-
-
 
         features = [self.down(y) for y in self.backbone(self.norm(image))]
         
         # print(f'len(features): {len(features)}')            # 2
-        # print(f'features[0].shape {features[0].shape}')     # (1, 32, 64, 256)  
-        # print(f'features[1].shape {features[1].shape}')  
+        print(f'features[0].shape {features[0].shape}')     # (6, 32,  64, 256)  
+        print(f'features[1].shape {features[1].shape}')     # (6, 112, 16, 64)
         
         # d H W
         x = self.bev_embedding.get_prior()
@@ -612,9 +636,10 @@ class GeometryKernelEncoder(nn.Module):
         x = repeat(x, '... -> b ...', b=b)
 
         for cross_view, feature, layer in zip(self.cross_views, features, self.layers):
-            feature = rearrange(feature, '(b n) ... -> b n ...', b=b, n=n)
+            feature = rearrange(feature, '(b n) ... -> b n ...', b=b, n=n) # 1,  6,  32,  64, 256
             x = cross_view(x, self.bev_embedding, feature, I_inv,
                            E_inv, batch['intrinsics'], batch['extrinsics'])
             x = layer(x)
 
+        print(f'x.shape {x.shape}')
         return x

@@ -3,7 +3,7 @@ _target_: transformer.cross_view_transformer.model.cvt.CrossViewTransformer
 dim_last: 64
 
 outputs:
-  bev: [0, 1]
+  bev: [0, 3] # rgb: 0,1,2
 
 encoder:
   _target_: transformer.cross_view_transformer.model.geometry_kernel_transformer_encoder_nuscenes.GeometryKernelEncoder

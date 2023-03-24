@@ -2,7 +2,7 @@ defaults:
   - _self_
   - model: gkt_nuscenes
   - satellite_model: cvt_satellite_nuscenes
-  - data: kitti_360
+  - data: nuscenes_vehicle
   - visualization: null
 
   - loss: default_loss        # Default: use ... /config/loss/default_loss.yaml

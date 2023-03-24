@@ -1258,7 +1258,7 @@ class LM_S2GP(nn.Module):
         grd_feat_dict = self.GrdFeatureNet(grdnet_input)
         grd_feat_list = []
         for _ in range(len(grd_feat_dict)):
-            grd_feat_list.append(grd_feat_dict['bev'])
+            grd_feat_list.append(grd_feat_dict['bev']) # (1, 3, 64, 64) 
         
         # TODO: Modify grd_conf_list
         scale = 0.1
@@ -1299,8 +1299,9 @@ class LM_S2GP(nn.Module):
             headings = []
             for level in range(len(sat_feat_list)):
                 sat_feat = sat_feat_list[level]
-                # print("sat_feat.shape = ", sat_feat.shape) # sat_feat.shape =  torch.Size([1, 64, 64, 64])
-                sat_feat_last_two_dim = sat_feat[0, -3:, :, :]
+                print("sat_feat.shape = ", sat_feat.shape) # sat_feat.shape =  torch.Size([1, 64, 64, 64])
+                sat_feat_last_two_dim = sat_feat[0, -3:, :, :] # (3, 64, 64)
+                print(f'sat_feat_last_two_dim.shape {sat_feat_last_two_dim.shape}')
                 save_image(sat_feat_last_two_dim, 'sat_feat.png')
 
                 test_tensor = torch.randint_like(sat_feat_last_two_dim, low=0, high=255)
@@ -1316,6 +1317,7 @@ class LM_S2GP(nn.Module):
 
                 grd_feat_last_two_dim = grd_feat[0, -3:, :, :]
                 # print("grd_feat_last_two_dim = ", grd_feat_last_two_dim)
+                print(f'grd_feat_last_two_dim.shape {grd_feat_last_two_dim.shape}')
                 save_image(grd_feat_last_two_dim, "grd_feat.png")
 
                 grd_conf = grd_conf_list[level]

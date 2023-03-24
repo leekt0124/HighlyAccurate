@@ -77,13 +77,16 @@ class EfficientNetExtractor(torch.nn.Module):
 
         # Pass a dummy tensor to precompute intermediate shapes
         dummy = torch.rand(1, 3, image_height, image_width)
+        print(f'image_height {image_height}, image_width {image_width}') # 224, 480 => /4
+        # TODO: shape shoule be 64 x ...
         output_shapes = [x.shape for x in self(dummy)] # [result[1].shape, result[3].shape]
         print(f'output_shapes: {output_shapes[0]}, {output_shapes[1]}') 
-        #
-        # 
+        #       (1, 32, 56, 120)  (1, 112, 14, 30) 
+        # Want: (1, 32, 64, 256)
 
         # Note: in gkt.yaml, backbone.image.h/.w should set to be input image.h/.w !
         # Satellite image: 512,512 / grd-images: 256,1024
+
 
         self.output_shapes = output_shapes
 

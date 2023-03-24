@@ -26,6 +26,12 @@ bev:
 # input parameters (not used in label generation)
 augment: 'none'
 image:
-  h: 224
-  w: 480
+  # h: 224
+  # w: 480
+  h: 256
+  w: 1024 
   top_crop: 46
+
+satellite_image:
+  h: 512
+  w: 512

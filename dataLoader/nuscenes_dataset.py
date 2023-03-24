@@ -72,7 +72,7 @@ def get_data(
     return result
 
 
-def get_split_data(dataset_dir, labels_dir, transform, shift_range_lat, shift_range_lon, rotation_range, split, loader_config, loader=True, shuffle=False):
+def get_split_data(dataset_dir, labels_dir, transform, shift_range_lat, shift_range_lon, rotation_range, split, version, loader_config, loader=True, shuffle=False):
     # get a list of NuScenesDataset
     datasets = get_data(
         dataset_dir,
@@ -81,7 +81,8 @@ def get_split_data(dataset_dir, labels_dir, transform, shift_range_lat, shift_ra
         split,
         shift_range_lat,
         shift_range_lon,
-        rotation_range
+        rotation_range,
+        version # v1.0-trainval or v1.0-mini
         )
 
     if not loader:
@@ -622,6 +623,7 @@ def load_train_data(dataset_dir, labels_dir, loader_config, batch_size, shift_ra
                              transform=(satmap_transform, grdimage_transform),
                              shift_range_lat=20, shift_range_lon=20, rotation_range=10,
                              split='train', 
+                             version = 'v1.0-mini',
                              loader_config = {},
                              loader=True, 
                              shuffle=False)
@@ -632,6 +634,30 @@ def load_train_data(dataset_dir, labels_dir, loader_config, batch_size, shift_ra
 
 
 def load_val_data(dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat=20, shift_range_lon=20, rotation_range=10):
-    val_loader = get_split_data(dataset_dir, labels_dir, split='val', loader_config={}, loader=True, shuffle=False)
-    return val_loader
+        
+        SatMap_process_sidelength = utils.get_process_satmap_sidelength()
+
+        satmap_transform = transforms.Compose([
+            transforms.Resize(size=[SatMap_process_sidelength, SatMap_process_sidelength]),
+            transforms.ToTensor(),
+        ])
+
+        Grd_h = GrdImg_H
+        Grd_w = GrdImg_W
+
+        grdimage_transform = transforms.Compose([
+            transforms.Resize(size=[Grd_h, Grd_w]),
+            transforms.ToTensor(),
+        ])
+            
+        val_loader = get_split_data(dataset_dir,
+                             labels_dir, 
+                             (satmap_transform, grdimage_transform),
+                             shift_range_lat, shift_range_lon, rotation_range,
+                             split='val', 
+                             version = 'v1.0-mini',
+                             loader_config = {},
+                             loader=True, 
+                             shuffle=False)
+        return val_loader
 

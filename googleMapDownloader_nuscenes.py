@@ -14,6 +14,9 @@ import os
 import math
 import sys
 
+from matplotlib import pyplot as plt
+
+
 TILE_SIZE = 1280
 
 class GoogleMapsLayers:
@@ -107,7 +110,7 @@ class GoogleMapDownloader:
 
         for x in range(0, tile_width):
             for y in range(0, tile_height):
-                print("     lat = ", self._lat, ", lng = ", self._lng)
+                # print(f'     lat = ", {self._lat: .10f}, ", lng = ", {self._lng: .10f}')
                 # url = f'https://mt0.google.com/vt?lyrs={self._layer}&x=' + str(start_x + x) + '&y=' + str(start_y + y) + '&z=' + str(
                 # self._zoom)
                 # Key from goroyeh56@gmail.com
@@ -244,6 +247,28 @@ def rad2deg(radian):
 def deg2rad(degree):
     return degree * math.pi/180    
 
+
+def getXYs(init_lat, init_lon, ego_poses):
+    '''
+    input: a python tensor of shape (3,) [x, y, theta]
+    return 2 numpy arrays of xs, ys
+    '''
+    print(type(ego_poses)) # list of structure
+
+    xs = np.zeros(len(ego_poses))
+    ys = np.zeros(len(ego_poses))
+    lats = np.zeros(len(ego_poses))
+    lons = np.zeros(len(ego_poses))    
+    for i in range(len(ego_poses)):
+        pose = torch.FloatTensor(ego_poses[i]['translation'])
+        xs[i] = pose[0]
+        ys[i] = pose[1]  
+        lat, lon = meter2latlon(init_lat, init_lon, xs[i], ys[i], "MATLAB")
+        lats[i] = lat
+        lons[i] = lon
+        # print(f'pose {pose} x {xs[i]} y {ys[i]}')
+
+    return xs, ys, lats, lons
 # Input: The origin (lat, long), translation(x, y)
 # Output: corresponding (lat, long) at this timestamp(give the translation x,y)
 def meter2latlon(init_lat, init_lon, x, y, type="MATLAB"):
@@ -277,10 +302,10 @@ def meter2latlon(init_lat, init_lon, x, y, type="MATLAB"):
 
     else: # Default
 
-        f = 1/298257 # flattening -> MATLAB ?    
+        f =     1/298257 # flattening -> MATLAB ?    
         R =     6378137 # equatorial radius
-        dNorth = x
-        dEast =  y
+        dNorth = y
+        dEast =  x
         Rn = R / (math.sqrt(1 - (2*f-f*f)*math.sin(deg2rad(init_lat))*math.sin(deg2rad(init_lon)))) # Prime Vertical Radius
         Rm = Rn * ( (1-(2*f-f*f)) / (1 - (2*f-f*f)*math.sin(deg2rad(init_lat))*math.sin(deg2rad(init_lon))) )# Meridional Radius 
         dLat = dNorth * math.atan2(1, Rm)
@@ -297,6 +322,22 @@ def meter2latlon(init_lat, init_lon, x, y, type="MATLAB"):
 #     outProj = Proj(init='epsg:4326')
 #     lat, lon = transform(inProj,outProj, x, y)
 #     return lat, lon
+def getLatLongfromPose(INIT_LAT, INIT_LONG, pose, type):
+
+    # rotation = torch.FloatTensor(pose['rotation'])
+    translation = torch.FloatTensor(pose['translation'])  
+    x, y, _ = translation  
+    # Covert (x,y) to lat,long
+    # scene1100 idx 0 :
+    '''
+        x: 396.56439208984375
+        y: 1125.94482421875    
+    '''
+    lat, long = meter2latlon(INIT_LAT, INIT_LONG, x,y, type)  
+    print(f'    x:  {x}          y:  {y}')
+    print(f'    lat: {lat: .10f} lon = {long: .10f}')
+    return x, y, lat, long  
+
 
 def getLatLongfromSceneIdx(INIT_LAT, INIT_LONG, poses, idx, type):
     # print(f'len(poses): {len(poses)}, idx: {idx}')
@@ -319,7 +360,7 @@ def getLatLongfromSceneIdx(INIT_LAT, INIT_LONG, poses, idx, type):
     # if idx==39:
     #     x = 100
     #     y = 50
-
+    print(f'    x:  {x}   y:  {y}')
     lat, long = meter2latlon(INIT_LAT, INIT_LONG, x,y, type)  
     return lat, long  
 
@@ -331,6 +372,14 @@ def get_satmap_name(image_name):
     x[1] = "_satmap_"
     satmap_filename = ''.join(x)
     return satmap_filename
+
+
+MAP_ORIGINS ={
+    'boston-seaport': (42.336849169438615, -71.05785369873047),
+    'singapore-onenorth': (1.2882100868743724, 103.78475189208984),
+    'singapore-hollandvillage': (1.2993652317780957, 103.78217697143555),
+    'singapore-queenstown': (1.2782562240223188, 103.76741409301758)    
+}
 
 INIT_LAT = 42.336849169438615
 INIT_LONG=  -71.05785369873047
@@ -361,25 +410,57 @@ def main():
     for scene in nusc.scene:
         
         scene_num = int(scene['name'].split("-")[1])
-        if scene_num <= 790:
-            continue
+        # print(scene['name'])
+        # continue
+        # if scene_num <= 790:
+            # continue
 
-        print(f'--------- [scene_num] {scene_num}-----------')
+        log = nusc.get('log', scene['log_token'])
+        location = log["location"]
+
+
+        print(f'--------- [scene_num] {scene_num} is at {location}-----------')
         scene_name = scene['name']
         print(f'{scene_name} has {scene["nbr_samples"]} samples')
         num_samples = scene["nbr_samples"] # e.g. 39 => idx: 0-38
 
         # Get ego_poses for this scene
         print(f'Get poses for {scene["name"]}')
-        stop += scene['nbr_samples']
-        ego_poses = nusc.ego_pose[start : stop] # a list of k/v pairs
-        ego_poses_list.append(nusc.ego_pose[start : stop])
-        start = stop
+
+        ## ----  ### 
+        '''
+        pose = nusc.get('ego_pose', cam_front_data['ego_pose_token'])   
+            iterate each sample in this scene
+            for each sample, get pose from CAM_FRONT   
+            Get lat/lon for this sample and download satmap
+        '''
+
+        # stop += scene['nbr_samples']
+        # ego_poses = nusc.ego_pose[start : stop] # a list of k/v pairs
+        # ego_poses_list.append(nusc.ego_pose[start : stop])
+        # start = stop
+
+        # Get ego_pose_token
+        # R = Quaternion(scalar=np.cos(yaw / 2), vector=[0, 0, np.sin(yaw / 2)]).rotation_matrix
+        # Change the quaternion to Yaw to get the yaw angle
+
+
         # mkdir satmap/scene_name/
         satmap_scene_path = nuScene_dataset_PATH + '/satmap/' + scene_name
         if not os.path.exists(satmap_scene_path):
             print(f'creating directory: {satmap_scene_path}')
             os.mkdir(satmap_scene_path)
+        else:
+            continue # to next scene!
+        
+        # if location!='boston-seaport':
+        #     if os.path.exists(satmap_scene_path):
+        #         # delete entire directory
+        #         shutil.rmtree(satmap_scene_path, ignore_errors=True)
+        #         # make a new one
+        #         os.mkdir(satmap_scene_path)
+
+
 
         print(f'Extracing {scene_name} satellite_maps...')
 
@@ -392,6 +473,11 @@ def main():
         if not os.path.exists(samples_scene_path):
             print(f'creating directory: {samples_scene_path}')
             os.mkdir(samples_scene_path)
+
+        xs = np.zeros(num_samples)
+        ys = np.zeros(num_samples)
+        lats = np.zeros(num_samples)
+        lons = np.zeros(num_samples)               
 
         # --- Iterate over samples to setup images and get satmap's name... --- #
         for i in range(num_samples):    
@@ -419,7 +505,16 @@ def main():
                 satmap_name = satmap_scene_path + '/' + satmap_name
                 if not os.path.exists(satmap_name) and sensor=="CAM_FRONT":  
                     # Get (lat, long) given this ego_pose                           # Use approximation derived from MATLAB script
-                    lat, long =  getLatLongfromSceneIdx(INIT_LAT, INIT_LONG, ego_poses, i, "MATLAB")
+
+                    pose = nusc.get('ego_pose', cam_data['ego_pose_token']) 
+                    init_lat, init_lon = MAP_ORIGINS[location]
+                    x, y, lat, long =  getLatLongfromPose(init_lat, init_lon, pose, "MATLAB")
+
+                    xs[i] = x
+                    ys[i] = y
+                    lats[i] = lat
+                    lons[i] = long
+                    # lat, long =  getLatLongfromSceneIdx(INIT_LAT, INIT_LONG, ego_poses, i, "MATLAB")
 
                     # zoom-level
                     # 0: whole world i
@@ -437,6 +532,41 @@ def main():
             if sample_token!="":
                 sample = nusc.get('sample', sample_token)
                 sample_data = sample['data']
+
+        # Plot the 2D trajectories for this scene
+        plt.figure(1)
+ 
+        plt.scatter(xs, ys)
+        plt.xlabel('x values')
+        plt.ylabel('y values')
+        plt.title('xs/ys values')
+        plt.legend(['ego_poses'])
+        plt.axis('square')
+
+        TRAJ_IMG_PATH = nuScene_dataset_PATH + '/trajectories/'
+        # save the figure
+        plt.savefig( os.path.join(TRAJ_IMG_PATH+'ego_poses(xy)-' + scene_name + '.png'), dpi=300, bbox_inches='tight')
+        plt.clf()
+
+        plt.figure(2)
+        plt.scatter(lons, lats)
+        plt.xlabel('longitude values')
+        plt.ylabel('latitude values')
+        plt.title('lats/lons values')
+        plt.legend(['ego_poses'])
+        plt.axis('square')
+        # save the figure
+        plt.savefig( os.path.join(TRAJ_IMG_PATH+'ego_poses(latlon)-' + scene_name + '.png'), dpi=300, bbox_inches='tight')
+        plt.clf()
+
+
+
+        # from pyquaternion import Quaternion
+        # # Print out the first pose['rotation']
+        # first_rotation_q = torch.FloatTensor(ego_poses[0]['rotation']).numpy() # tO NUMPY ARRAY
+        # print(f'first_rotation_q {first_rotation_q}') # ([ 0.5732, -0.0016,  0.0139, -0.8193])
+        # yaw = rad2deg(Quaternion(first_rotation_q).yaw_pitch_roll[0])
+        # print(f'First pose yaw: {yaw}')
 
 
 

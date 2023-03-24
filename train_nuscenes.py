@@ -385,12 +385,6 @@ def train(net, lr, args, mini_batch, device, save_path):
 
         for Loop, Data in enumerate(trainloader, 0):
             # get the inputs
-
-            # TODO: see what train_loader we got:
-            print(f'load_train_data: ')
-            print(f'len(Data) {len(Data)}')
-            # print(f'Data: {Data}')s
-
             sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in Data]
 
             # TODO: remove file_name from the network forward function

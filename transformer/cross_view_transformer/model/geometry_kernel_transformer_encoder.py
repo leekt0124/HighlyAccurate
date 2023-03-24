@@ -574,6 +574,8 @@ class GeometryKernelAttention(nn.Module):
         # concat feature and embeddings for sampling
         d_feature = feature_flat.shape[1]     
 
+        print(f'feature_flat.shape {feature_flat.shape} d_flat.shape {d_flat.shape}')
+
         feature_embed = torch.cat([feature_flat, d_flat], dim=1)
         feature_embed, mask = self.sampling(
             bev.grid.detach().clone(), feature_embed, I_, E_)
