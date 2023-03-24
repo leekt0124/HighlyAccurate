@@ -627,9 +627,9 @@ def setup_satellite_model_module(cfg) -> ModelModule:
 def setup_model_module(cfg) -> ModelModule:
     print(f'setup_ground_images_model_module')
     backbone = setup_network(cfg, 'ground')
-    print(f'Setup loss_func: {cfg.loss}')
+    # print(f'Setup loss_func: {cfg.loss}')
     loss_func = MultipleLoss(instantiate(cfg.loss))
-    print(f'Setup Metrics: {cfg.metrics}')
+    # print(f'Setup Metrics: {cfg.metrics}')
     metrics = MetricCollection({k: v for k, v in instantiate(cfg.metrics).items()})
 
     model_module = ModelModule(backbone, loss_func, metrics,
@@ -1220,6 +1220,9 @@ class LM_S2GP(nn.Module):
         # sat_map.unsqueeze(1) : add one dimension for dimension 1 (from left->right)
         # Note: extrinsics should reshape to (1, 1, 4, 4)
         # TODO: What should be intrinsics and extrinsics
+        print(f'sat_map.shape {sat_map.shape}')
+        print(f'grd_imgs.shape {grd_imgs.shape}')
+        print(f'sat_map.unsqueeze(1).shape {sat_map.unsqueeze(1).shape}') # sat_map.unsqueeze(1).shape torch.Size([4, 1, 3, 512, 512])
         satnet_input = {'image': sat_map.unsqueeze(1),  'intrinsics': torch.eye(3), 'extrinsics': torch.eye(4, device=sat_map.device).reshape(1, 1, 4, 4)}
         sat_feat_dict= self.SatFeatureNet(satnet_input)
         sat_feat_list = []
@@ -1229,30 +1232,13 @@ class LM_S2GP(nn.Module):
         conf_tensor = torch.ones([1, 1, 64, 64])
         scale = 0.1
         sat_conf_list = torch.ones_like(conf_tensor, device=sat_map.device)*scale
-
-        # for idx, _ in enumerate(sat_feat_list):
-        #     print(f'level {idx}')
-        #     print(f'sat_feat_list[{idx}].shape     {sat_feat_list[idx].shape}')
-        #     print(f'sat_conf_list[{idx}].shape     {sat_conf_list[idx].shape}')
-
         '''
             sat_feat_list: a list of tensors 
                 each item: features of this level 
                 sat_feat_list[0].shape     torch.Size([1, 256, 64, 64])
-                sat_conf_list.shape     torch.Size([1, 1, 64, 64])   
-                
-                level 0
-                sat_feat_list[0].shape     torch.Size([1, 256, 64, 64])
-                sat_conf_list[0].shape     torch.Size([1, 1, 64, 64])
-                level 1
-                sat_feat_list[1].shape     torch.Size([1, 128, 128, 128])
-                sat_conf_list[1].shape     torch.Size([1, 1, 128, 128])
-                level 2
-                sat_feat_list[2].shape     torch.Size([1, 64, 256, 256])
-                sat_conf_list[2].shape     torch.Size([1, 1, 256, 256])                
-
+               
         '''        
-
+        print(f'grd_imgs.shape {grd_imgs.shape}')
         grdnet_input = {'image': grd_imgs, 'intrinsics': intrinsics, 'extrinsics':extrinsics}
         # grd_feat_list, grd_conf_list = self.GrdFeatureNet(grdnet_input)
         grd_feat_dict = self.GrdFeatureNet(grdnet_input)

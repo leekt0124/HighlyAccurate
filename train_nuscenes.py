@@ -31,6 +31,8 @@ import time
 # from models_kitti_360 import LM_G2SP, loss_func, LM_S2GP
 from models_nuscenes import LM_G2SP, loss_func, LM_S2GP
 
+# garbage collector
+import gc
 
 ########################### ranking test ############################
 def localize(net_localize, args, mini_batch, device, save_path, best_rank_result, epoch):
@@ -59,8 +61,8 @@ def localize(net_localize, args, mini_batch, device, save_path, best_rank_result
 def test1(mini_batch, net_test, args, save_path, best_rank_result, epoch, device):
     ### net evaluation state
     net_test.eval()
-
-    dataloader = load_val_data(mini_batch, args.shift_range_lat, args.shift_range_lon, args.rotation_range)
+    dataloader = load_val_data(args.version, args.dataset_dir, args.labels_dir, args.loader, mini_batch, \
+                               args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir)
     pred_shifts = []
     pred_headings = []
     gt_shifts = []
@@ -377,7 +379,8 @@ def train(net, lr, args, mini_batch, device, save_path):
         
         print(f'args.dataset_dir: {args.dataset_dir}')
         print(f'args.labels_dir: {args.labels_dir}')        
-        trainloader = load_train_data(args.dataset_dir, args.labels_dir,  args.loader, mini_batch, args.shift_range_lat, args.shift_range_lon, args.rotation_range)
+        trainloader = load_train_data(args.version, args.dataset_dir, args.labels_dir,  args.loader, mini_batch,\
+                                      args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir)
 
         loss_vec = []
 
@@ -602,6 +605,9 @@ def main(cfg):
     net = eval('LM_' + cfg.highlyaccurate.direction)(cfg) # class LM_S2GP
 
     ### cudaargs.epochs, args.debug)
+    gc.collect()
+
+    torch.cuda.empty_cache()   
     net.to(device)
     ###########################
 

@@ -1,6 +1,7 @@
 _target_: transformer.cross_view_transformer.model.cvt.CrossViewTransformer
 
 dim_last: 64
+# dim_last: 56
 
 outputs:
   bev: [0, 3] # rgb: 0,1,2

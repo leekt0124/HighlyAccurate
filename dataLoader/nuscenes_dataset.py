@@ -36,13 +36,14 @@ NUM_CLASSES = len(CLASSES)
 
 
 def get_data(
+    version,  # 'v1.0-trainval' or -mini
     dataset_dir,
     labels_dir,
     input_image_transform,
     split,
     shift_range_lat, shift_range_lon, rotation_range, 
-    version ='v1.0-mini',
-    # version ='v1.0-trainval',
+    root_dir,
+   
     dataset='unused',                   # ignore
     augment='unused',                   # ignore
     image='unused',                     # ignore
@@ -66,15 +67,17 @@ def get_data(
             continue
 
         data = NuScenesDataset(scene_name, scene_record, helper, input_image_transform,
-                               transform=transform, shift_range_lat=20, shift_range_lon=20, rotation_range=10, **dataset_kwargs)
+                               transform, shift_range_lat, shift_range_lon, rotation_range, root_dir, **dataset_kwargs)
         result.append(data)
 
     return result
 
 
-def get_split_data(dataset_dir, labels_dir, transform, shift_range_lat, shift_range_lon, rotation_range, split, version, loader_config, loader=True, shuffle=False):
+def get_split_data(version, dataset_dir, labels_dir, transform, shift_range_lat, shift_range_lon, rotation_range, \
+                   root_dir, loader_config, split, loader=True, shuffle=False):
     # get a list of NuScenesDataset
     datasets = get_data(
+        version, # v1.0-trainval or v1.0-mini
         dataset_dir,
         labels_dir,
         transform,
@@ -82,7 +85,7 @@ def get_split_data(dataset_dir, labels_dir, transform, shift_range_lat, shift_ra
         shift_range_lat,
         shift_range_lon,
         rotation_range,
-        version # v1.0-trainval or v1.0-mini
+        root_dir
         )
 
     if not loader:
@@ -173,9 +176,10 @@ class NuScenesDataset(torch.utils.data.Dataset):
         helper: NuScenesSingleton,
         input_image_transform,
         transform=None,                 # transform: the label class (SaveDataTransform)
+        shift_range_lat=20, shift_range_lon=20, rotation_range=10,
+        root_dir = "/mnt/workspace/datasets/nuscenes/",
         cameras=[[0, 1, 2, 3, 4, 5]],
-        bev={'h': 200, 'w': 200, 'h_meters': 100, 'w_meters': 100, 'offset': 0.0},
-        shift_range_lat=20, shift_range_lon=20, rotation_range=10
+        bev={'h': 200, 'w': 200, 'h_meters': 100, 'w_meters': 100, 'offset': 0.0}
     ):
         self.scene_name = scene_name
         self.transform = transform
@@ -200,6 +204,9 @@ class NuScenesDataset(torch.utils.data.Dataset):
         self.shift_range_pixels_lon = shift_range_lon / self.meter_per_pixel  # shift range is in terms of meters
         # self.shift_range_meters = shift_range  # in terms of meters
         self.rotation_range = rotation_range  # in terms of degree
+
+        # For __getitem__() to load /samples/ and /satmap/
+        self.root_dir = root_dir
 
     def parse_scene(self, scene_record, camera_rigs):
         data = []
@@ -513,8 +520,13 @@ class NuScenesDataset(torch.utils.data.Dataset):
         '''
 
         scene_name = sample['scene']
-        SAMPLES_PATH = '/home/goroyeh/nuScene_dataset/samples/'
-        SATMAP_PATH  = '/home/goroyeh/nuScene_dataset/satmap/' + scene_name + '/'
+
+
+        # /mnt/workspace: /mnt/workspace/datasets/nuscenes/localization/ + {samples/ | satmap/ }
+        SAMPLES_PATH = self.root_dir + 'samples/' 
+        SATMAP_PATH  = self.root_dir + 'satmap/' + scene_name + '/'
+        # SAMPLES_PATH = '/home/goroyeh/nuScene_dataset/samples/'
+        # SATMAP_PATH  = '/home/goroyeh/nuScene_dataset/satmap/' + scene_name + '/'
 
 
         # load ground-view images
@@ -541,8 +553,10 @@ class NuScenesDataset(torch.utils.data.Dataset):
             print(f'satmap {sat_map_filename} not exist! Either wrong filename or need to download from google map.')
             # print(f'satmap: {sat_map_filename}')
 
-        with Image.open(sat_map_filename, 'r') as SatMap:
-            sat_map = SatMap.convert('RGB')
+        else:
+            print(f'Load {sat_map_filename}')
+            with Image.open(sat_map_filename, 'r') as SatMap:
+                sat_map = SatMap.convert('RGB')
 
         yaw = sample['yaw']
         heading = yaw
@@ -600,7 +614,7 @@ GrdOriImg_W = 1408
 train_file = '../../../dataLoader/nuscenes_train.txt'
 test_file = '../../../dataLoader/nuscenes_test.txt'
 
-def load_train_data(dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat=20, shift_range_lon=20, rotation_range=10):
+def load_train_data(version, dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat, shift_range_lon, rotation_range, root_dir):
     
     SatMap_process_sidelength = utils.get_process_satmap_sidelength()
 
@@ -618,13 +632,15 @@ def load_train_data(dataset_dir, labels_dir, loader_config, batch_size, shift_ra
     ])
     
     
-    train_loader = get_split_data(dataset_dir="/home/goroyeh/nuScene_dataset/media/datasets/nuscenes",
-                             labels_dir="/home/goroyeh/nuScene_dataset/media/datasets/cvt_labels_nuscenes", 
-                             transform=(satmap_transform, grdimage_transform),
-                             shift_range_lat=20, shift_range_lon=20, rotation_range=10,
+    train_loader = get_split_data(
+                             version,
+                             dataset_dir, #="/home/goroyeh/nuScene_dataset/media/datasets/nuscenes",
+                             labels_dir, #="/home/goroyeh/nuScene_dataset/media/datasets/cvt_labels_nuscenes", 
+                             (satmap_transform, grdimage_transform),
+                             shift_range_lat, shift_range_lon, rotation_range,
+                             root_dir,
+                             loader_config,
                              split='train', 
-                             version = 'v1.0-mini',
-                             loader_config = {},
                              loader=True, 
                              shuffle=False)
 
@@ -633,7 +649,7 @@ def load_train_data(dataset_dir, labels_dir, loader_config, batch_size, shift_ra
     return train_loader
 
 
-def load_val_data(dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat=20, shift_range_lon=20, rotation_range=10):
+def load_val_data(version, dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat, shift_range_lon, rotation_range, root_dir):
         
         SatMap_process_sidelength = utils.get_process_satmap_sidelength()
 
@@ -650,13 +666,15 @@ def load_val_data(dataset_dir, labels_dir, loader_config, batch_size, shift_rang
             transforms.ToTensor(),
         ])
             
-        val_loader = get_split_data(dataset_dir,
+        val_loader = get_split_data(
+                             version,
+                             dataset_dir,
                              labels_dir, 
                              (satmap_transform, grdimage_transform),
                              shift_range_lat, shift_range_lon, rotation_range,
+                             root_dir,
+                             loader_config,
                              split='val', 
-                             version = 'v1.0-mini',
-                             loader_config = {},
                              loader=True, 
                              shuffle=False)
         return val_loader

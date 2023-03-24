@@ -28,7 +28,7 @@ augment: 'none'
 image:
   # h: 224
   # w: 480
-  h: 256
+  h: 256 # 64*4 = 256
   w: 1024 
   top_crop: 46
 

@@ -478,6 +478,8 @@ class GeometryKernelAttention(nn.Module):
         print(f'cam.shape {cam.shape}')        # (1, 6, 4, 6720)
         d = E_inv @ cam   #  (1, 6, 4, 6720)
         # (b n) 4 h w
+
+        # TODO: if I want something to match (56, 120) => Input feature should be # 1,6,32,[56, 120] instead of [64, 256]
         d_flat = rearrange(d, 'b n d (h w) -> (b n) d h w', h=h, w=w) #  (1, 6,  4, 56, 120) -> ( 6,  4, 56, 120)
         print(f'd.shape {d.shape}') # [1,6,4,6720]
 
@@ -635,6 +637,8 @@ class GeometryKernelEncoder(nn.Module):
         # b d H W
         x = repeat(x, '... -> b ...', b=b)
 
+
+        # feature should be shape (1, 6, 32, 56, 120)
         for cross_view, feature, layer in zip(self.cross_views, features, self.layers):
             feature = rearrange(feature, '(b n) ... -> b n ...', b=b, n=n) # 1,  6,  32,  64, 256
             x = cross_view(x, self.bev_embedding, feature, I_inv,

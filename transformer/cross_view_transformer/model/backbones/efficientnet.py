@@ -81,6 +81,7 @@ class EfficientNetExtractor(torch.nn.Module):
         # TODO: shape shoule be 64 x ...
         output_shapes = [x.shape for x in self(dummy)] # [result[1].shape, result[3].shape]
         print(f'output_shapes: {output_shapes[0]}, {output_shapes[1]}') 
+        # output_shapes: torch.Size([1, 32, 64, 256]), torch.Size([1, 112, 16, 64])
         #       (1, 32, 56, 120)  (1, 112, 14, 30) 
         # Want: (1, 32, 64, 256)
 
