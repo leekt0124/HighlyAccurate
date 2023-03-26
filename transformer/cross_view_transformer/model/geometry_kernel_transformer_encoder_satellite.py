@@ -390,6 +390,7 @@ class Encoder(nn.Module):
         self.cross_views = nn.ModuleList(cross_views)
         self.layers = nn.ModuleList(layers)
 
+
     def forward(self, batch):
 
         """
@@ -420,11 +421,15 @@ class Encoder(nn.Module):
         # print(f'E.shape {batch["extrinsics"].shape}') [1, 1, 4, 4]
 
         features = [self.down(y) for y in self.backbone(self.norm(images))]
-
         # Note: Only return the features after passing backbone
         print(f'[Satellite net] features.shape: {features.shape}')
 
-        # Want features.shape be 
+        # feat1, feat2 = features
+        # # Pass (1, 112, 32, 32) feature to self.upsample
+        # satellite_feature = feat1 + self.upsample(feat2)
+
+        # print(f'[Satellite feature shape] {satellite_feature.shape}')
+        # return satellite_feature
         # 
         
         # return features 

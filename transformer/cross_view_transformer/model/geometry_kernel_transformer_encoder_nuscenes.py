@@ -389,11 +389,11 @@ class GeometryKernelAttention(nn.Module):
 
         # 1 1 3 h w
         image_plane = generate_grid(feat_height, feat_width)[None]
-        print(f'image_width {image_width}  image_height {image_height}')
+        # print(f'image_width {image_width}  image_height {image_height}')
         image_plane[:, :, 0] *= image_width
         image_plane[:, :, 1] *= image_height
 
-        print(image_plane.shape) # (1, 1, 3, 56, 120) (1, 1, 3, 14, 30) -> 
+        # print(image_plane.shape) # (1, 1, 3, 56, 120) (1, 1, 3, 14, 30) -> 
 
         self.register_buffer('image_plane', image_plane, persistent=False)
 
@@ -457,7 +457,7 @@ class GeometryKernelAttention(nn.Module):
         # b n 3 h w
         pixel = self.image_plane
         _, _, _, h, w = pixel.shape
-        print(f'pixel.shape {pixel.shape}') # (1, 1, 3, 56, 120) Want: (1, 1, 3, 64, 256)
+        # print(f'pixel.shape {pixel.shape}') # (1, 1, 3, 56, 120) Want: (1, 1, 3, 64, 256)
 
         # b n 4 1
         c = E_inv[..., -1:]
@@ -469,20 +469,14 @@ class GeometryKernelAttention(nn.Module):
         # 1 1 3 (h w)
         pixel_flat = rearrange(pixel, '... h w -> ... (h w)') # (1, 1, 3, 6720)
         # b n 3 (h w)
-        print(f'I_inv.shape {I_inv.shape}')            # (1, 6, 3, 3)
-        print(f'pixel_flat.shape {pixel_flat.shape}')  # (1, 1, 3, 6720) Problem! Should be (1, 1, 3, (64, 256)) the h has problem!
         cam = I_inv @ pixel_flat  # (1, 6, 3, 6720) 
         cam = F.pad(cam, (0, 0, 0, 1, 0, 0, 0, 0), value=1)
         # b n 4 (h w)
-        print(f'E_inv.shape {E_inv.shape}')    # (1, 6, 4, 4)
-        print(f'cam.shape {cam.shape}')        # (1, 6, 4, 6720)
         d = E_inv @ cam   #  (1, 6, 4, 6720)
         # (b n) 4 h w
 
-        # TODO: if I want something to match (56, 120) => Input feature should be # 1,6,32,[56, 120] instead of [64, 256]
         d_flat = rearrange(d, 'b n d (h w) -> (b n) d h w', h=h, w=w) #  (1, 6,  4, 56, 120) -> ( 6,  4, 56, 120)
-        print(f'd.shape {d.shape}') # [1,6,4,6720]
-
+        
         # 2 H W
         world = bev.grid[:2]
         # 1 d H W
@@ -492,10 +486,7 @@ class GeometryKernelAttention(nn.Module):
         # (b n) d H W
         bev_embed = bev_embed / (bev_embed.norm(dim=1, keepdim=True) + 1e-7)
         # b n d H W
-        query_pos = rearrange(bev_embed, '(b n) ... -> b n ...', b=b, n=n)
-
-        print(f'feature.shape {feature.shape}') # 1,6,32,64,256
-        
+        query_pos = rearrange(bev_embed, '(b n) ... -> b n ...', b=b, n=n)        
         # (b n) d h w
         feature_flat = rearrange(feature, 'b n ... -> (b n) ...')
 
@@ -504,8 +495,8 @@ class GeometryKernelAttention(nn.Module):
         # concat feature and embeddings for sampling
         d_feature = feature_flat.shape[1]
 
-        print(f'feat_flat.shape {feature_flat.shape}') # 6, 32, 64, 256
-        print(f'd_flat.shape {d_flat.shape}')          # 6,  4, 56, 120
+        # print(f'feat_flat.shape {feature_flat.shape}') # 6, 32, 64, 256 # Want feat_flat to be 56, 120
+        # print(f'd_flat.shape {d_flat.shape}')          # 6,  4, 56, 120
         feature_embed = torch.cat([feature_flat, d_flat], dim=1)
         feature_embed, mask = self.sampling(
             bev.grid.detach().clone(), feature_embed, I_, E_)
@@ -571,7 +562,7 @@ class GeometryKernelEncoder(nn.Module):
             _, feat_dim, feat_height, feat_width = self.down(
                 torch.zeros(feat_shape)).shape
 
-            print(f'feat_height, {feat_height}, feat_width {feat_width}') # 56, 120 => This is the issue!
+            # print(f'feat_height, {feat_height}, feat_width {feat_width}') # 56, 120 => This is the issue!
 
             # Should be (64, 256) and ()
 
@@ -625,12 +616,13 @@ class GeometryKernelEncoder(nn.Module):
         # b n 4 4
         E_inv = batch['extrinsics'].inverse()     
 
+        # print(f' [GrdNet] image.shape {image.shape}') # ([6, 3, 256, 1024])
 
         features = [self.down(y) for y in self.backbone(self.norm(image))]
         
         # print(f'len(features): {len(features)}')            # 2
-        print(f'features[0].shape {features[0].shape}')     # (6, 32,  64, 256)  
-        print(f'features[1].shape {features[1].shape}')     # (6, 112, 16, 64)
+        # print(f'features[0].shape {features[0].shape}')     # (6, 32,  64, 256)  
+        # print(f'features[1].shape {features[1].shape}')     # (6, 112, 16, 64)
         
         # d H W
         x = self.bev_embedding.get_prior()
@@ -645,5 +637,5 @@ class GeometryKernelEncoder(nn.Module):
                            E_inv, batch['intrinsics'], batch['extrinsics'])
             x = layer(x)
 
-        print(f'x.shape {x.shape}')
+        # print(f'x.shape {x.shape}')
         return x

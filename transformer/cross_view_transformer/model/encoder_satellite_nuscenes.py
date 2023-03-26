@@ -299,14 +299,14 @@ class CrossViewAttention(nn.Module):
 
         # 2 H W
         world = bev.grid[:2]
-        print(f'bev.grid.shape {bev.grid.shape} bev.grid[:,2].shape {bev.grid[:2].shape}')
+        # print(f'bev.grid.shape {bev.grid.shape} bev.grid[:,2].shape {bev.grid[:2].shape}')
         # 1 d H W
 
-        print(f'world.shape {world.shape} world[None] {world[None].shape}')
+        # print(f'world.shape {world.shape} world[None] {world[None].shape}')
         w_embed = self.bev_embed(world[None])
         
 
-        print(f'w_embed {w_embed.shape}  c_embed {c_embed.shape}')
+        # print(f'w_embed {w_embed.shape}  c_embed {c_embed.shape}')
         # (b n) d H W
         bev_embed = w_embed - c_embed
         bev_embed = bev_embed / \
@@ -380,10 +380,16 @@ class Encoder(nn.Module):
         self.cross_views = nn.ModuleList(cross_views)
         self.layers = nn.ModuleList(layers)
 
+        # 0326: Add a upsample layer for (1, 112, 32, 32) feature -> (1, 32, 128, 128)
+        self.upsample = nn.Sequential(
+            nn.Conv2d(112, 32, (1,1), stride=1),
+            nn.Upsample(scale_factor=4)
+        )
+
     def forward(self, batch):
         b, n, _, _, _ = batch['image'].shape
 
-        print(f'satellite map.shape {batch["image"].shape}') # 4, 1, 3, 512, 512
+        # print(f'satellite map.shape {batch["image"].shape}') # 4, 1, 3, 512, 512
 
         image = batch['image'].flatten(0, 1)            # b n c h w
         I_inv = batch['intrinsics'].inverse()           # b n 3 3
@@ -400,8 +406,18 @@ class Encoder(nn.Module):
         # print(f'[Satellite net] features[0].shape: {features[0].shape}')
         # return features 
 
-        print(f'features[0].shape {features[0].shape}')
-        print(f'features[1].shape {features[1].shape}')        
+        # print(f'features[0].shape {features[0].shape}')
+        # print(f'features[1].shape {features[1].shape}')        
+
+
+
+        feat1, feat2 = features
+        # Pass (1, 112, 32, 32) feature to self.upsample
+        # print(f'self.upsample(feat2).shape {self.upsample(feat2).shape}')
+        satellite_feature = feat1 + self.upsample(feat2)
+
+        # print(f'[Satellite feature shape] {satellite_feature.shape}')
+        return satellite_feature
 
         # Goal: return a tensor of shape ()
 

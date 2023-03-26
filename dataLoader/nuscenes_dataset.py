@@ -554,7 +554,7 @@ class NuScenesDataset(torch.utils.data.Dataset):
             # print(f'satmap: {sat_map_filename}')
 
         else:
-            print(f'Load {sat_map_filename}')
+            # print(f'Load {sat_map_filename}')
             with Image.open(sat_map_filename, 'r') as SatMap:
                 sat_map = SatMap.convert('RGB')
 
@@ -607,14 +607,14 @@ root_dir = '/home/goroyeh/nuScene_dataset'
 # samples_dir = '/samples'
 # satmap_dir = '/satmap'
 
-GrdImg_H = 256
-GrdImg_W = 1024
+# GrdImg_H = 256
+# GrdImg_W = 1024
 GrdOriImg_H = 376
 GrdOriImg_W = 1408
 train_file = '../../../dataLoader/nuscenes_train.txt'
 test_file = '../../../dataLoader/nuscenes_test.txt'
 
-def load_train_data(version, dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat, shift_range_lon, rotation_range, root_dir):
+def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat, shift_range_lon, rotation_range, root_dir):
     
     SatMap_process_sidelength = utils.get_process_satmap_sidelength()
 
@@ -623,7 +623,10 @@ def load_train_data(version, dataset_dir, labels_dir, loader_config, batch_size,
         transforms.ToTensor(),
     ])
 
-    Grd_h = GrdImg_H
+    print(f'GrdImg_H: {GrdImg_H}')
+    print(f'GrdImg_W: {GrdImg_W}')    
+    
+    Grd_h = GrdImg_H 
     Grd_w = GrdImg_W
 
     grdimage_transform = transforms.Compose([
@@ -649,7 +652,7 @@ def load_train_data(version, dataset_dir, labels_dir, loader_config, batch_size,
     return train_loader
 
 
-def load_val_data(version, dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat, shift_range_lon, rotation_range, root_dir):
+def load_val_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat, shift_range_lon, rotation_range, root_dir):
         
         SatMap_process_sidelength = utils.get_process_satmap_sidelength()
 

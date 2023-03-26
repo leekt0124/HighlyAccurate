@@ -17,8 +17,10 @@ label_indices: null
 
 # label parameters
 bev: 
-  h: 200
-  w: 200
+  # h: 200
+  # w: 200
+  h: 128
+  w: 128  
   h_meters: 100.0
   w_meters: 100.0
   offset: 0.0
@@ -26,10 +28,10 @@ bev:
 # input parameters (not used in label generation)
 augment: 'none'
 image:
-  # h: 224
-  # w: 480
-  h: 256 # 64*4 = 256
-  w: 1024 
+  h: 224
+  w: 480
+  # h: 256 # 64*4 = 256
+  # w: 1024 
   top_crop: 46
 
 satellite_image:

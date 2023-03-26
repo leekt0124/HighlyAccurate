@@ -21,6 +21,7 @@ encoder:
     image_height: ${data.image.h}
     image_width: ${data.image.w}
 
+
   cross_view:
     heads: 4
     dim_head: 32

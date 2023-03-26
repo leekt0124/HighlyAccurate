@@ -61,6 +61,10 @@ dataset_dir: "/mnt/workspace/datasets/nuScene_dataset/media/datasets/nuscenes"
 root_dir:  "/mnt/workspace/datasets/nuScene_dataset/" # satmap/ or samples
 # labels_dir : "/home/goroyeh/nuScene_dataset/media/datasets/cvt_labels_nuscenes/" # Actually, not used!
 
+GrdImg_H: ${data.image.h}
+GrdImg_W: ${data.image.w}
+
+
 loader:
   batch_size: 1
   num_workers: 4

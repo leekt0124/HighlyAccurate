@@ -1,5 +1,5 @@
 # This is the yaml file for the satellite transformer model
-_target_: transformer.cross_view_transformer.model.cvt.CrossViewTransformer
+_target_: transformer.cross_view_transformer.model.cvt_satellite.CrossViewTransformer
 
 dim_last: 64
 

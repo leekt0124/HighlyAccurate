@@ -1340,7 +1340,8 @@ class LM_S2GP(nn.Module):
                 grd_conf_new = grd_conf
                 # print(f'sat_feat.shape {sat_feat.shape}')
                 # B, C, H, W = sat_feat.shape
-                dfeat_dpose_new = torch.zeros([3, B, C, H, W], device=shift_u.device) #dfeat_dpose               
+                # TODO: should not be zero
+                dfeat_dpose_new = torch.ones([3, B, C, H, W], device=shift_u.device) #dfeat_dpose               
 
                 if self.args.Optimizer == 'LM':
                     # Check devices                 

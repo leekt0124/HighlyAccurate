@@ -61,7 +61,7 @@ def localize(net_localize, args, mini_batch, device, save_path, best_rank_result
 def test1(mini_batch, net_test, args, save_path, best_rank_result, epoch, device):
     ### net evaluation state
     net_test.eval()
-    dataloader = load_val_data(args.version, args.dataset_dir, args.labels_dir, args.loader, mini_batch, \
+    dataloader = load_val_data(args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir, args.loader, mini_batch, \
                                args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir)
     pred_shifts = []
     pred_headings = []
@@ -376,9 +376,9 @@ def train(net, lr, args, mini_batch, device, save_path):
         print(base_lr)
 
         optimizer = optim.Adam(net.parameters(), lr=base_lr)
-        print("Model's state_dict:")
-        for param_tensor in net.state_dict():
-            print(param_tensor, "\t", net.state_dict()[param_tensor].size())
+        # print("Model's state_dict:")
+        # for param_tensor in net.state_dict():
+            # print(param_tensor, "\t", net.state_dict()[param_tensor].size())
 
         optimizer.zero_grad()
 
@@ -386,7 +386,7 @@ def train(net, lr, args, mini_batch, device, save_path):
         
         print(f'args.dataset_dir: {args.dataset_dir}')
         print(f'args.labels_dir: {args.labels_dir}')        
-        trainloader = load_train_data(args.version, args.dataset_dir, args.labels_dir,  args.loader, mini_batch,\
+        trainloader = load_train_data(args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir,  args.loader, mini_batch,\
                                       args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir)
 
         loss_vec = []
@@ -395,12 +395,12 @@ def train(net, lr, args, mini_batch, device, save_path):
 
         for Loop, Data in enumerate(trainloader, 0):
             # Early stopping (leekt)
-            if Loop > 10:
-                break
-            else:
-                print("loop = ", Loop)
+            # if Loop > 10:
+            #     break
+            # else:
+            #     print("loop = ", Loop)
 
-            print(f'device: {device}')
+            # print(f'device: {device}')
             # get the inputs
             sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in Data]
 
