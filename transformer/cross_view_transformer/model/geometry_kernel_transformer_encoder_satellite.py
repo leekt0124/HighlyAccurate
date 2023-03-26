@@ -423,6 +423,10 @@ class Encoder(nn.Module):
 
         # Note: Only return the features after passing backbone
         print(f'[Satellite net] features.shape: {features.shape}')
+
+        # Want features.shape be 
+        # 
+        
         # return features 
 
         x = self.bev_embedding.get_prior()              # d H W

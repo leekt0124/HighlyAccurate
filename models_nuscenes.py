@@ -1208,21 +1208,25 @@ class LM_S2GP(nn.Module):
         '''
 
         """
+
+        sat_map:  [1, 1, 3, 512, 512]
+        grd_imgs: [1, 6, 3, 256, 1024]
+
+        sat_feat: [1, 3, 200, 200]
+        grd_feat: [1, 3, 200, 200]
+
+        1. If batch_size = 4: kernel attention has problem (satellite net)
+
         Input for GrdFeatureNet: dict
         {image: tensor of shape [B,C,A,A],
          intrinsics: tensor of shape B, N, 3, 3 (B=1, N=6) 
          extrinsicx: tensor of shape B, N, 4, 4}        
         """
 
-        intrinsics_dict_sat = {
-            'sat_cam': torch.eye(3)
-        }
         # sat_map.unsqueeze(1) : add one dimension for dimension 1 (from left->right)
         # Note: extrinsics should reshape to (1, 1, 4, 4)
-        # TODO: What should be intrinsics and extrinsics
-        print(f'sat_map.shape {sat_map.shape}')
-        print(f'grd_imgs.shape {grd_imgs.shape}')
-        print(f'sat_map.unsqueeze(1).shape {sat_map.unsqueeze(1).shape}') # sat_map.unsqueeze(1).shape torch.Size([4, 1, 3, 512, 512])
+        # TODO: Ignore I/E, pass sat_map to only BACKBONE network! What should be intrinsics and extrinsics
+
         satnet_input = {'image': sat_map.unsqueeze(1),  'intrinsics': torch.eye(3,device=sat_map.device), 'extrinsics': torch.eye(4, device=sat_map.device).reshape(1, 1, 4, 4)}
         sat_feat_dict= self.SatFeatureNet(satnet_input)
         sat_feat_list = []
@@ -1232,15 +1236,9 @@ class LM_S2GP(nn.Module):
         conf_tensor = torch.ones([1, 1, 64, 64])
         scale = 0.1
         sat_conf_list = torch.ones_like(conf_tensor, device=sat_map.device)*scale
-        '''
-            sat_feat_list: a list of tensors 
-                each item: features of this level 
-                sat_feat_list[0].shape     torch.Size([1, 256, 64, 64])
-               
-        '''        
-        print(f'grd_imgs.shape {grd_imgs.shape}')
+
+
         grdnet_input = {'image': grd_imgs, 'intrinsics': intrinsics, 'extrinsics':extrinsics}
-        # grd_feat_list, grd_conf_list = self.GrdFeatureNet(grdnet_input)
         grd_feat_dict = self.GrdFeatureNet(grdnet_input)
         grd_feat_list = []
         for _ in range(len(grd_feat_dict)):

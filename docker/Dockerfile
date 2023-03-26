@@ -29,6 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Nuscene
 RUN pip install nuscenes-devkit
 
+# For wget weight path in save_gif_stitch.py
+RUN pip install aiofiles
+
 # scipy, tensorboard
 # RUN pip install scipy
 # RUN pip install tensorboard

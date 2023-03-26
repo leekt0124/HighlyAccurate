@@ -41,9 +41,9 @@ def setup_model_module(cfg: DictConfig) -> ModelModule:
 
     return model_module
 
-
+# goro 
 def setup_data_module(cfg: DictConfig) -> DataModule:
-    return DataModule(cfg.data.dataset, cfg.data, cfg.loader)
+    return DataModule(cfg.data.dataset, cfg.data, cfg.highlyaccurate.loader)
 
 
 def setup_viz(cfg: DictConfig) -> Callable:
@@ -63,7 +63,7 @@ def load_backbone(checkpoint_path: str, prefix: str = 'backbone'):
     checkpoint = torch.load(checkpoint_path)
 
     cfg = DictConfig(checkpoint['hyper_parameters'])  
-    print(f'checkpoint hyperparams: {checkpoint["hyper_parameters"]}')
+    # print(f'checkpoint hyperparams: {checkpoint["hyper_parameters"]}')
 
     cfg = OmegaConf.to_object(checkpoint['hyper_parameters'])
     # cfg['model']['encoder']['backbone']['image_height'] = cfg['model']['encoder']['backbone'].pop('input_height')
@@ -75,6 +75,7 @@ def load_backbone(checkpoint_path: str, prefix: str = 'backbone'):
 
     state_dict = remove_prefix(checkpoint['state_dict'], prefix)
 
+    # print(f'load_backbone cfg.model {cfg.model}')
     backbone = setup_network(cfg)
     backbone.load_state_dict(state_dict)
 
