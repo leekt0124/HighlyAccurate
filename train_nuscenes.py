@@ -72,15 +72,16 @@ def test1(mini_batch, net_test, args, save_path, best_rank_result, epoch, device
     for i, data in enumerate(dataloader, 0):
      
         # sat_map, left_camera_k, grd_left_imgs, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in data[:-1]]
-        sat_map, grd_imgs, extrinsics, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in data[:-2]]
-        intrinsics_dict = data[-2]
-        file_name = data[-1]
+        sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in data]
+
+        # TODO: remove file_name from the network forward function
+        file_name = "temp"
 
         if args.direction == 'S2GP':   
-            shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, intrinsics_dict, extrinsics,  mode='test')     
+            shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, intrinsics, extrinsics,  mode='test')     
             # shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, mode='test')
         elif args.direction == 'G2SP':
-            shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, intrinsics_dict, mode='test')
+            shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, intrinsics, mode='test')
 
         shifts = torch.stack([shifts_lat, shifts_lon], dim=-1)
         headings = theta.unsqueeze(dim=-1)
