@@ -1220,9 +1220,9 @@ class LM_S2GP(nn.Module):
         # sat_map.unsqueeze(1) : add one dimension for dimension 1 (from left->right)
         # Note: extrinsics should reshape to (1, 1, 4, 4)
         # TODO: What should be intrinsics and extrinsics
-        print(f'sat_map.shape {sat_map.shape}')
-        print(f'grd_imgs.shape {grd_imgs.shape}')
-        print(f'sat_map.unsqueeze(1).shape {sat_map.unsqueeze(1).shape}') # sat_map.unsqueeze(1).shape torch.Size([4, 1, 3, 512, 512])
+        # print(f'sat_map.shape {sat_map.shape}')
+        # print(f'grd_imgs.shape {grd_imgs.shape}')
+        # print(f'sat_map.unsqueeze(1).shape {sat_map.unsqueeze(1).shape}') # sat_map.unsqueeze(1).shape torch.Size([4, 1, 3, 512, 512])
         satnet_input = {'image': sat_map.unsqueeze(1),  'intrinsics': torch.eye(3,device=sat_map.device), 'extrinsics': torch.eye(4, device=sat_map.device).reshape(1, 1, 4, 4)}
         sat_feat_dict= self.SatFeatureNet(satnet_input)
         sat_feat_list = []
@@ -1238,7 +1238,7 @@ class LM_S2GP(nn.Module):
                 sat_feat_list[0].shape     torch.Size([1, 256, 64, 64])
                
         '''        
-        print(f'grd_imgs.shape {grd_imgs.shape}')
+        # print(f'grd_imgs.shape {grd_imgs.shape}')
         grdnet_input = {'image': grd_imgs, 'intrinsics': intrinsics, 'extrinsics':extrinsics}
         # grd_feat_list, grd_conf_list = self.GrdFeatureNet(grdnet_input)
         grd_feat_dict = self.GrdFeatureNet(grdnet_input)
@@ -1303,7 +1303,7 @@ class LM_S2GP(nn.Module):
 
                 grd_feat_last_two_dim = grd_feat[0, -3:, :, :]
                 # print("grd_feat_last_two_dim = ", grd_feat_last_two_dim)
-                print(f'grd_feat_last_two_dim.shape {grd_feat_last_two_dim.shape}')
+                # print(f'grd_feat_last_two_dim.shape {grd_feat_last_two_dim.shape}')
                 save_image(grd_feat_last_two_dim, "grd_feat.png")
 
                 grd_conf = grd_conf_list[level]
