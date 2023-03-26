@@ -1223,7 +1223,7 @@ class LM_S2GP(nn.Module):
         print(f'sat_map.shape {sat_map.shape}')
         print(f'grd_imgs.shape {grd_imgs.shape}')
         print(f'sat_map.unsqueeze(1).shape {sat_map.unsqueeze(1).shape}') # sat_map.unsqueeze(1).shape torch.Size([4, 1, 3, 512, 512])
-        satnet_input = {'image': sat_map.unsqueeze(1),  'intrinsics': torch.eye(3), 'extrinsics': torch.eye(4, device=sat_map.device).reshape(1, 1, 4, 4)}
+        satnet_input = {'image': sat_map.unsqueeze(1),  'intrinsics': torch.eye(3,device=sat_map.device), 'extrinsics': torch.eye(4, device=sat_map.device).reshape(1, 1, 4, 4)}
         sat_feat_dict= self.SatFeatureNet(satnet_input)
         sat_feat_list = []
         for _ in range(len(sat_feat_dict)):

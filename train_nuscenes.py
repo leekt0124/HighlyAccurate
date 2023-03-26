@@ -387,6 +387,7 @@ def train(net, lr, args, mini_batch, device, save_path):
         print('batch_size:', mini_batch, '\n num of batches:', len(trainloader))
 
         for Loop, Data in enumerate(trainloader, 0):
+            print(f'device: {device}')
             # get the inputs
             sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in Data]
 

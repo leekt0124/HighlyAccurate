@@ -280,6 +280,8 @@ class CrossViewAttention(nn.Module):
         # 1 1 3 (h w)
         pixel_flat = rearrange(pixel, '... h w -> ... (h w)')
         # b n 3 (h w)
+        print(f'I_inv.device: {I_inv.device}')
+        print(f'pixel_flat.device: {pixel_flat.device}')        
         cam = I_inv @ pixel_flat
         cam = F.pad(cam, (0, 0, 0, 1, 0, 0, 0, 0),
                     value=1)                     # b n 4 (h w)
@@ -386,6 +388,11 @@ class Encoder(nn.Module):
         image = batch['image'].flatten(0, 1)            # b n c h w
         I_inv = batch['intrinsics'].inverse()           # b n 3 3
         E_inv = batch['extrinsics'].inverse()           # b n 4 4
+
+        # print(f'image.device: {image.device}')
+        # print(f'I_inv.device: {I_inv.device}')  
+        # print(f'E_inv.device: {E_inv.device}')
+  
 
         features = [self.down(y) for y in self.backbone(self.norm(image))]
 

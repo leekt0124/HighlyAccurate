@@ -52,13 +52,13 @@ use_transformer: True
 version: "v1.0-mini"
 # version: "v1.0-trainval" # or v1.0-mini (Only 10 scenes)
 # For nuscenes_dataset.py
-dataset_dir: "/home/goroyeh/nuScene_dataset/media/datasets/nuscenes"
+# dataset_dir: "/home/goroyeh/nuScene_dataset/media/datasets/nuscenes"
 labels_dir : "/home/goroyeh/nuScene_dataset/media/datasets/cvt_labels_nuscenes"
-root_dir:  "/home/goroyeh/nuScene_dataset/"
+# root_dir:  "/home/goroyeh/nuScene_dataset/"
 
 # On /mnt/workspace/datasets/ :
-# dataset_dir: "/mnt/workspace/datasets/nuScene_dataset/media/datasets/nuscenes"
-# root_dir:  "/mnt/workspace/datasets/nuScene_dataset/" # satmap/ or samples
+dataset_dir: "/mnt/workspace/datasets/nuScene_dataset/media/datasets/nuscenes"
+root_dir:  "/mnt/workspace/datasets/nuScene_dataset/" # satmap/ or samples
 # labels_dir : "/home/goroyeh/nuScene_dataset/media/datasets/cvt_labels_nuscenes/" # Actually, not used!
 
 loader:
