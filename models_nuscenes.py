@@ -1301,7 +1301,7 @@ class LM_S2GP(nn.Module):
 
                 grd_feat_last_two_dim = grd_feat[0, -3:, :, :]
                 # print("grd_feat_last_two_dim = ", grd_feat_last_two_dim)
-                print(f'grd_feat_last_two_dim.shape {grd_feat_last_two_dim.shape}')
+                # print(f'grd_feat_last_two_dim.shape {grd_feat_last_two_dim.shape}')
                 save_image(grd_feat_last_two_dim, "grd_feat.png")
 
                 grd_conf = grd_conf_list[level]

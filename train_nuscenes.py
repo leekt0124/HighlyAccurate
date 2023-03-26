@@ -70,6 +70,9 @@ def test1(mini_batch, net_test, args, save_path, best_rank_result, epoch, device
 
     start_time = time.time()
     for i, data in enumerate(dataloader, 0):
+
+        if i > 10:
+            break
      
         # sat_map, left_camera_k, grd_left_imgs, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in data[:-1]]
         sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in data]
@@ -373,6 +376,9 @@ def train(net, lr, args, mini_batch, device, save_path):
         print(base_lr)
 
         optimizer = optim.Adam(net.parameters(), lr=base_lr)
+        print("Model's state_dict:")
+        for param_tensor in net.state_dict():
+            print(param_tensor, "\t", net.state_dict()[param_tensor].size())
 
         optimizer.zero_grad()
 
@@ -388,6 +394,12 @@ def train(net, lr, args, mini_batch, device, save_path):
         print('batch_size:', mini_batch, '\n num of batches:', len(trainloader))
 
         for Loop, Data in enumerate(trainloader, 0):
+            # Early stopping (leekt)
+            if Loop > 10:
+                break
+            else:
+                print("loop = ", Loop)
+
             print(f'device: {device}')
             # get the inputs
             sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in Data]
@@ -411,6 +423,8 @@ def train(net, lr, args, mini_batch, device, save_path):
                 L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list = \
                     net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, mode='train', file_name=file_name)
 
+            print("loss = ", loss)
+            print("loss_drcrease = ", loss_decrease)
             loss.backward()
 
             optimizer.step()  # This step is responsible for updating weights
@@ -577,7 +591,8 @@ def getSavePath(args):
 
 
     # TODO: Goro change this for convenience
-    save_path = '../../../ModelsKitti/'
+    # save_path = '../../../ModelsKitti/'
+    save_path = '.'
     print(f'save_path: {save_path}, CWD: {Path.cwd()}')
 
     return save_path
