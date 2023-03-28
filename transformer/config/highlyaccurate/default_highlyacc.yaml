@@ -1,8 +1,9 @@
+date: "0328"
 resume: 0
 test: 0
 localize: 0 
 debug: 0 
-epochs: 5
+epochs: 1
 lr: 4e-3 #0.0001 (1e-4)
 stereo: 0 
 sequence: 1 
@@ -63,6 +64,6 @@ root_dir:  "/mnt/workspace/datasets/nuScene_dataset/" # satmap/ or samples
 
 GrdImg_H: ${data.image.h}
 GrdImg_W: ${data.image.w}
-
+zoom_level: ${data.zoom_level}
 
 loader: ${loader}

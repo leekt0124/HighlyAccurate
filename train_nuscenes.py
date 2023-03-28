@@ -62,7 +62,7 @@ def test1( net_test, args, save_path, best_rank_result, epoch, device):
     ### net evaluation state
     net_test.eval()
     dataloader = load_val_data(args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir, args.loader, \
-                               args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir)
+                               args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir, args.zoom_level)
     pred_shifts = []
     pred_headings = []
     gt_shifts = []
@@ -361,7 +361,7 @@ def test2(net_test, args, save_path, best_rank_result, epoch,  device):
 
 
 ###### learning criterion assignment #######
-def train(net, lr, args, device, save_path):
+def train(net, lr, args, device, save_path, model_save_path):
     bestRankResult = 0.0  # current best, Siam-FCANET18
     # loop over the dataset multiple times
     print(f'resume: {args.resume}')
@@ -383,12 +383,16 @@ def train(net, lr, args, device, save_path):
 
         ### feeding A and P into train loader     
         trainloader = load_train_data(args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir,  args.loader, \
-                                      args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir)
+                                      args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir, args.zoom_level)
 
         loss_vec = []
 
         # For v1.0-trainval: batch_size:  4 => num of batches: 7033
         print(f'batch_size:  {args.loader.batch_size}\nnum of batches: {len(trainloader)}')
+
+
+        # Initialize last_model_save_path
+        last_model_save_path = model_save_path
 
         for Loop, Data in enumerate(trainloader, 0):
 
@@ -434,10 +438,16 @@ def train(net, lr, args, device, save_path):
                 # for level in range(len(shifts_decrease)):
                 # print(loss_decrease[level].shape)
                 print('Epoch: ' + str(epoch) + ' Loop: ' + str(Loop) + ' Delta: Level-' + str(level) +
-                      ' loss: ' + str(np.round(loss_decrease[level].item(), decimals=4)) +
+                      ' loss: ' + str(np.round(loss.item(), decimals=4)) +
                       ' lat: ' + str(np.round(shift_lat_decrease[level].item(), decimals=2)) +
                       ' lon: ' + str(np.round(shift_lon_decrease[level].item(), decimals=2)) +
                       ' rot: ' + str(np.round(thetas_decrease[level].item(), decimals=2)))
+
+                # print('Epoch: ' + str(epoch) + ' Loop: ' + str(Loop) + ' Delta: Level-' + str(level) +
+                #       ' loss: ' + str(np.round(loss_decrease[level].item(), decimals=4)) +
+                #       ' lat: ' + str(np.round(shift_lat_decrease[level].item(), decimals=2)) +
+                #       ' lon: ' + str(np.round(shift_lon_decrease[level].item(), decimals=2)) +
+                #       ' rot: ' + str(np.round(thetas_decrease[level].item(), decimals=2)))
 
                 if args.loss_method == 3:
                     print('Epoch: ' + str(epoch) + ' Loop: ' + str(Loop) + ' Last: Level-' + str(level) +
@@ -464,13 +474,36 @@ def train(net, lr, args, device, save_path):
                           ' rot: ' + str(np.round(theta_last[level].item(), decimals=2))
                           )
 
+            # Save the model every 100 loop in a single epoch
+            if Loop % 10 == 9:
+                # print('save model ...')
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
+                old_path = last_model_save_path
+
+                model_save_path_splits = model_save_path.split('_')
+                model_save_path_splits[-1] = "Loop" + str(Loop)
+                new_model_save_path = os.path.join(model_save_path_splits[0] + '_' + \
+                                                   model_save_path_splits[1] + '_' + \
+                                                   model_save_path_splits[2] + '_' + \
+                                                   model_save_path_splits[3] + '_' + \
+                                                   model_save_path_splits[4] + '_' + \
+                                                   model_save_path_splits[5] + '.pth')
+                print(f'save model ... {new_model_save_path}')
+                torch.save(net.state_dict(), new_model_save_path)
+                if os.path.exists(old_path):
+                    os.remove(old_path)
+
+                last_model_save_path = new_model_save_path
+
         ### save modelget_similarity_fn
         compNum = epoch % 100
         print('taking snapshot ...')
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
-        torch.save(net.state_dict(), os.path.join(save_path, 'model_' + str(compNum) + '.pth'))
+        torch.save(net.state_dict(), model_save_path)
+        # torch.save(net.state_dict(), os.path.join(save_path, 'model_' + str(compNum) + '.pth'))
 
         ### ranking test        
         current = test1(net, args, save_path, bestRankResult, epoch, device)
@@ -484,46 +517,51 @@ def train(net, lr, args, device, save_path):
 
 
 def getSavePath(args):
+    '''
+        Get the directory where you want to save the trained model.
+        Current working directory: /home/goroyeh/Yujiao/leekt/HighlyAccurate/outputs/2023-03-28/18-26-44/
+        ModelsNuscenes/ :          /home/goroyeh/Yujiao/leekt/HighlyAccurate/ModelsNuscenes/
+    '''
 
+    # if args.test and args.use_default_model:
+    #     save_path = '/mnt/workspace/datasets/yujiao_data/Models/ModelsKitti/LM_S2GP/lat20.0m_lon20.0m_rot10.0_Lev3_Nit5_Wei0_Dam0_Load0_LM_loss0_100.0_100.0_100.0_100.0_100.0_100.0_100.0'
+    # elif not args.test and args.use_default_model:
+    #     raise Exception("Can not use default model in non-testing mode")
+    # else:
+    #     save_path = './ModelsKitti/LM_' + str(args.direction) \
+    #             + '/lat' + str(args.shift_range_lat) + 'm_lon' + str(args.shift_range_lon) + 'm_rot' + str(
+    #     args.rotation_range) \
+    #             + '_Lev' + str(args.level) + '_Nit' + str(args.N_iters) \
+    #             + '_Wei' + str(args.using_weight) \
+    #             + '_Dam' + str(args.train_damping) \
+    #             + '_Load' + str(args.Load) + '_' + str(args.Optimizer) \
+    #             + '_loss' + str(args.loss_method) \
+    #             + '_' + str(args.coe_shift_lat) + '_' + str(args.coe_shift_lon) + '_' + str(args.coe_heading) \
+    #             + '_' + str(args.coe_L1) + '_' + str(args.coe_L2) + '_' + str(args.coe_L3) + '_' + str(args.coe_L4)
 
-    if args.test and args.use_default_model:
-        save_path = '/mnt/workspace/datasets/yujiao_data/Models/ModelsKitti/LM_S2GP/lat20.0m_lon20.0m_rot10.0_Lev3_Nit5_Wei0_Dam0_Load0_LM_loss0_100.0_100.0_100.0_100.0_100.0_100.0_100.0'
-    elif not args.test and args.use_default_model:
-        raise Exception("Can not use default model in non-testing mode")
-    else:
-        save_path = './ModelsKitti/LM_' + str(args.direction) \
-                + '/lat' + str(args.shift_range_lat) + 'm_lon' + str(args.shift_range_lon) + 'm_rot' + str(
-        args.rotation_range) \
-                + '_Lev' + str(args.level) + '_Nit' + str(args.N_iters) \
-                + '_Wei' + str(args.using_weight) \
-                + '_Dam' + str(args.train_damping) \
-                + '_Load' + str(args.Load) + '_' + str(args.Optimizer) \
-                + '_loss' + str(args.loss_method) \
-                + '_' + str(args.coe_shift_lat) + '_' + str(args.coe_shift_lon) + '_' + str(args.coe_heading) \
-                + '_' + str(args.coe_L1) + '_' + str(args.coe_L2) + '_' + str(args.coe_L3) + '_' + str(args.coe_L4)
+    # if args.level_first:
+    #     save_path += '_Level1st'
 
-    if args.level_first:
-        save_path += '_Level1st'
+    # if args.proj != 'geo':
+    #     save_path += '_' + args.proj
 
-    if args.proj != 'geo':
-        save_path += '_' + args.proj
+    # if args.use_gt_depth:
+    #     save_path += '_depth'
 
-    if args.use_gt_depth:
-        save_path += '_depth'
+    # if args.use_hessian:
+    #     save_path += '_Hess'
 
-    if args.use_hessian:
-        save_path += '_Hess'
+    # if args.dropout > 0:
+    #     save_path += '_Dropout' + str(args.dropout)
 
-    if args.dropout > 0:
-        save_path += '_Dropout' + str(args.dropout)
-
-    if args.damping != 0.1:
-        save_path += '_Damping' + str(args.damping)
+    # if args.damping != 0.1:
+    #     save_path += '_Damping' + str(args.damping)
 
 
     # TODO: Goro change this for convenience
     # save_path = '../../../ModelsKitti/'
-    save_path = '.'
+    save_path = '../../../ModelsNuscenes/'
+    # save_path = '.'
     print(f'save_path: {save_path}, CWD: {Path.cwd()}')
 
     return save_path
@@ -533,8 +571,10 @@ from pathlib import Path
 CONFIG_PATH = Path.cwd() / 'transformer/config'
 CONFIG_NAME = 'config.yaml'
 import hydra
+
 @hydra.main(config_path=CONFIG_PATH, config_name=CONFIG_NAME)
 def main(cfg):
+
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
     else:
@@ -564,9 +604,16 @@ def main(cfg):
             # test2(net, cfg, save_path, 0., epoch=0)
         
         else:
+            date           = str(cfg.highlyaccurate.date)  # e.g. 0328
+            epoch_str      = str(cfg.highlyaccurate.epochs)
+            batch_size_str = str(cfg.loader.batch_size)
+            lr_str         = str(cfg.highlyaccurate.lr)
+            model_path_name = os.path.join(save_path, 'model_' + date + '_epoch'+ epoch_str + \
+                                           '_batch'+ batch_size_str +'_lr'+lr_str + '_Loop0.pth')
 
             if cfg.highlyaccurate.resume:
-                net.load_state_dict(torch.load(os.path.join(save_path, 'model_' + str(cfg.highlyaccurate.resume - 1) + '.pth')))
+                net.load_state_dict(torch.load(model_path_name))
+                # net.load_state_dict(torch.load(os.path.join(save_path, 'model_' + str(cfg.highlyaccurate.resume - 1) + '.pth')))
                 print("resume from " + 'model_' + str(cfg.highlyaccurate.resume - 1) + '.pth')
 
             if cfg.highlyaccurate.visualize:
@@ -575,7 +622,7 @@ def main(cfg):
 
             lr = cfg.highlyaccurate.lr
 
-            train(net, lr, cfg.highlyaccurate, device, save_path)
+            train(net, lr, cfg.highlyaccurate, device, save_path, model_path_name)
 
 
 if __name__ == '__main__':

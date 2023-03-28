@@ -22,6 +22,12 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
+
+import sys
+sys.path.append("..")
+from googleMapDownloader_nuscenes import GoogleMapDownloader, GoogleMapsLayers, getLatLongfromPose, MAP_ORIGINS
+ 
+
 STATIC = ['lane', 'road_segment']
 DIVIDER = ['road_divider', 'lane_divider']
 DYNAMIC = [
@@ -43,6 +49,7 @@ def get_data(
     split,
     shift_range_lat, shift_range_lon, rotation_range, 
     root_dir,
+    zoom_level,
    
     dataset='unused',                   # ignore
     augment='unused',                   # ignore
@@ -66,7 +73,7 @@ def get_data(
         if scene_name not in split_scenes:
             continue
 
-        data = NuScenesDataset(scene_name, scene_record, helper, input_image_transform,
+        data = NuScenesDataset(scene_name, scene_record, zoom_level, helper, input_image_transform,
                                transform, shift_range_lat, shift_range_lon, rotation_range, root_dir, **dataset_kwargs)
         result.append(data)
 
@@ -74,7 +81,7 @@ def get_data(
 
 
 def get_split_data(version, dataset_dir, labels_dir, transform, shift_range_lat, shift_range_lon, rotation_range, \
-                   root_dir, loader_config, split, loader=True, shuffle=False):
+                   root_dir, zoom_level, loader_config, split, loader=True, shuffle=False):
     # get a list of NuScenesDataset
     datasets = get_data(
         version, # v1.0-trainval or v1.0-mini
@@ -85,7 +92,8 @@ def get_split_data(version, dataset_dir, labels_dir, transform, shift_range_lat,
         shift_range_lat,
         shift_range_lon,
         rotation_range,
-        root_dir
+        root_dir,
+        zoom_level
         )
 
     if not loader:
@@ -173,6 +181,7 @@ class NuScenesDataset(torch.utils.data.Dataset):
         self,
         scene_name: str,
         scene_record: dict,
+        zoom_level: int,
         helper: NuScenesSingleton,
         input_image_transform,
         transform=None,                 # transform: the label class (SaveDataTransform)
@@ -182,6 +191,8 @@ class NuScenesDataset(torch.utils.data.Dataset):
         bev={'h': 200, 'w': 200, 'h_meters': 100, 'w_meters': 100, 'offset': 0.0}
     ):
         self.scene_name = scene_name
+        self.zoom_level = zoom_level # for download satmap
+
         self.transform = transform
 
         self.nusc = helper.nusc
@@ -266,9 +277,21 @@ class NuScenesDataset(torch.utils.data.Dataset):
 
             yaw = self.get_yaw_in_radian(egolidar)
 
+            # Get nusc.pose 
+            if cam_channel=="CAM_FRONT":
+                pose = self.nusc.get('ego_pose', cam_record['ego_pose_token'])
+
+        # Get log
+        scene_record = self.nusc.get('scene', sample_record['scene_token'])
+        log = self.nusc.get('log', scene_record['log_token'])
+        location = log["location"]
+
         return {
             'scene': self.scene_name,
             'token': sample_record['token'],
+
+            'location': location,
+            'pose_for_satmap'    : pose,
 
             'pose': world_from_egolidarflat.tolist(),
             'pose_inverse': egolidarflat_from_world.tolist(),
@@ -551,15 +574,13 @@ class NuScenesDataset(torch.utils.data.Dataset):
         sat_map_filename= SATMAP_PATH + get_satmap_name(grd_image_names[1])
         if not os.path.exists(sat_map_filename):
             print(f'satmap {sat_map_filename} not exist! Either wrong filename or need to download from google map.')
-            # print(f'satmap: {sat_map_filename}')
+            # print(f'sample["pose"] {sample["pose"]}')
+            download_satmap(sample['location'], sample['pose_for_satmap'], sat_map_filename, self.zoom_level)
 
-        else:
-            # print(f'Load {sat_map_filename}')
-            with Image.open(sat_map_filename, 'r') as SatMap:
-                sat_map = SatMap.convert('RGB')
-
-        yaw = sample['yaw']
-        heading = yaw
+        with Image.open(sat_map_filename, 'r') as SatMap:
+            sat_map = SatMap.convert('RGB')
+            
+        heading = sample['yaw']
         heading = torch.from_numpy(np.asarray(heading))
         
         sat_rot = sat_map.rotate(-heading / np.pi * 180)
@@ -600,7 +621,7 @@ class NuScenesDataset(torch.utils.data.Dataset):
                torch.tensor(theta, dtype=torch.float32).reshape(1)
 
 
-def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, shift_range_lat, shift_range_lon, rotation_range, root_dir):
+def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, shift_range_lat, shift_range_lon, rotation_range, root_dir, zoom_level):
     
     SatMap_process_sidelength = utils.get_process_satmap_sidelength()
 
@@ -628,6 +649,7 @@ def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader
                              (satmap_transform, grdimage_transform),
                              shift_range_lat, shift_range_lon, rotation_range,
                              root_dir,
+                             zoom_level,
                              loader_config,
                              split='train', 
                              loader=True, 
@@ -638,7 +660,7 @@ def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader
     return train_loader
 
 
-def load_val_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, shift_range_lat, shift_range_lon, rotation_range, root_dir):
+def load_val_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, shift_range_lat, shift_range_lon, rotation_range, root_dir, zoom_level):
         
         SatMap_process_sidelength = utils.get_process_satmap_sidelength()
 
@@ -662,9 +684,22 @@ def load_val_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_c
                              (satmap_transform, grdimage_transform),
                              shift_range_lat, shift_range_lon, rotation_range,
                              root_dir,
+                             zoom_level,
                              loader_config,
                              split='val', 
                              loader=True, 
                              shuffle=False)
         return val_loader
+
+
+def download_satmap(location, pose, satmap_filename, zoom_level=18):
+
+    init_lat, init_lon = MAP_ORIGINS[location]
+    _, _, lat, long =  getLatLongfromPose(init_lat, init_lon, pose, "MATLAB")
+    # ------- Query satmap from Google Map -------- #
+    gmd = GoogleMapDownloader(lat, long, zoom_level, GoogleMapsLayers.SATELLITE)
+    img = gmd.generateImage()
+    # save images to disk
+    print(f'saving {satmap_filename}...')
+    img.save(satmap_filename)    
 

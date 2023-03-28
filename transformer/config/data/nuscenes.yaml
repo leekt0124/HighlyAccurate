@@ -37,3 +37,5 @@ image:
 satellite_image:
   h: 512
   w: 512
+
+zoom_level: 18

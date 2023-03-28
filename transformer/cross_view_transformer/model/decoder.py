@@ -18,7 +18,7 @@ class DecoderBlock(torch.nn.Module):
             nn.BatchNorm2d(out_channels))
 
         if residual:
-            self.up = nn.Conv2d(skip_dim, out_channels, 1)
+            self.up = nn.Conv2d(skip_dim, out_channels, 1) # skip_dim: ${encoder.dim} = 128 , out_channels =[128, 128, 64]
         else:
             self.up = None
 
@@ -27,10 +27,12 @@ class DecoderBlock(torch.nn.Module):
     def forward(self, x, skip):
         # print(f'    Before block: shape {x.shape}')
         x = self.conv(x)
-        # print(f'    After block: shape {x.shape}') # Last block: (1, 64, 200, 200)
-
+        
         if self.up is not None:
-            up = self.up(skip)
+            # skip is the same input tensor from encoder!
+            up = self.up(skip) 
+            # F.interpolate: Upsample up.shape[-2:] to becomes x.shape[-2:]
+            # Thus, we can add x and up and pass it through a relu()
             up = F.interpolate(up, x.shape[-2:])
 
             x = x + up
@@ -50,6 +52,7 @@ class Decoder(nn.Module):
         blocks [128, 128, 64]
         residual True
         factor 2
+        => dim = 64, 64, 32
         '''
 
         layers = list()
