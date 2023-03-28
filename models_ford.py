@@ -1086,6 +1086,7 @@ def loss_func(loss_method, ref_feat_list, pred_feat_dict, gt_feat_dict, shift_la
 
     if loss_method == 0:
         losses = coe_shift_lat * shift_lat_delta + coe_shift_lon * shift_lon_delta + coe_theta * thetas_delta  # [N_iters, level]
+        print("losses = ", losses)
         loss_decrease = losses[0] - losses[-1]  # [level]
         loss = torch.mean(losses)  # mean or sum
         loss_last = losses[-1]

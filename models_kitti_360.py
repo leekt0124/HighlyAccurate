@@ -809,8 +809,8 @@ class LM_S2GP(nn.Module):
         Args:
             sat_f: [B, C, H, W]
             sat_c: [B, 1, H, W]
-            shift_u: [B, 2]
-            shift_v: [B, 2]
+            shift_u: [B, 2] # (leekt) should be [B, 1]?
+            shift_v: [B, 2] # (leekt) should be [B, 1]?
             heading: [B, 1]
             camera_k: [B, 3, 3]
 
@@ -822,6 +822,9 @@ class LM_S2GP(nn.Module):
         '''
         B, C, satmap_sidelength, _ = sat_f.size()
         A = satmap_sidelength
+
+        # print("shift_u = ", shift_u)
+        # print("shift_v = ", shift_v)
 
         uv, mask, jac_shiftu, jac_shiftv, jac_heading = self.grd2cam2world2sat(shift_u, shift_v, heading, level,
                                     satmap_sidelength, require_jac, gt_depth)
@@ -1151,6 +1154,8 @@ class LM_S2GP(nn.Module):
         '''
 
         B, _, ori_grdH, ori_grdW = grd_img_left.shape
+        print("grd_img_left.shape = ", grd_img_left.shape)
+        print("sat_map.shape = ", sat_map.shape)
 
         # A = sat_map.shape[-1]
         # sat_img_proj, _, _, _, _ = self.project_map_to_grd(
@@ -1184,12 +1189,14 @@ class LM_S2GP(nn.Module):
             for level in range(len(sat_feat_list)):
                 sat_feat = sat_feat_list[level]
                 sat_conf = sat_conf_list[level]
+                # print("sat_conf.shape = ", sat_conf.shape)
                 grd_feat = grd_feat_list[level]
                 grd_conf = grd_conf_list[level]
+                # print("grd_conf.shape = ", grd_conf.shape)
 
                 # Visualize weights
                 # sat_feat
-                print("sat_feat.shape = ", sat_feat.shape) # (1, 256, 64, 64) 
+                # print("sat_feat.shape = ", sat_feat.shape) # (1, 256, 64, 64) 
                 C_sat, H_sat, W_sat = sat_feat.squeeze(0).shape
                 B_sat = C_sat // 3
                 sat_feat_visualize = sat_feat.squeeze(0)[:B_sat * 3]
@@ -1203,7 +1210,7 @@ class LM_S2GP(nn.Module):
                 plt.savefig('sat_feat.png')
 
                 # grd_feat
-                print("grd_feat.shape = ", grd_feat.shape) # (1, 256, 64, 64) 
+                # print("grd_feat.shape = ", grd_feat.shape) # (1, 256, 64, 64) 
                 C_grd, H_grd, W_grd = grd_feat.squeeze(0).shape
                 B_grd = C_grd // 3
                 grd_feat_visualize = grd_feat.squeeze(0)[:B_grd * 3]
@@ -1220,6 +1227,20 @@ class LM_S2GP(nn.Module):
                 sat_feat_proj, sat_conf_proj, dfeat_dpose, sat_uv, mask = self.project_map_to_grd(
                     sat_feat, sat_conf, shift_u, shift_v, heading, level, gt_depth=gt_depth)
                 # [B, C, H, W], [B, 1, H, W], [3, B, C, H, W], [B, H, W, 2]
+
+                # sat_feat_proj
+                # print("grd_feat.shape = ", grd_feat.shape) # (1, 256, 64, 64) 
+                C_grd, H_grd, W_grd = sat_feat_proj.squeeze(0).shape
+                B_grd = C_grd // 3
+                sat_feat_proj_visualize = sat_feat_proj.squeeze(0)[:B_grd * 3]
+                sat_feat_proj_visualize = sat_feat_proj_visualize.reshape(B_grd, 3, H_grd, W_grd)
+                nrow = math.ceil(math.sqrt(sat_feat_proj_visualize.shape[0]))
+                grid = make_grid(sat_feat_proj_visualize, nrow=nrow, padding=1, normalize=True, scale_each=False)
+                plt.imshow(grid.to(device='cpu').permute(1, 2, 0))
+                plt.axis('off')
+                plt.gcf().set_size_inches(5, 5)
+                plt.show()
+                plt.savefig('sat_feat_proj.png')
 
                 grd_feat = grd_feat * mask[:, None, :, :]
                 grd_conf = grd_conf * mask[:, None, :, :]

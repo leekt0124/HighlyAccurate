@@ -417,6 +417,8 @@ def train(net, lr, args, save_path):
                 L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list = \
                     net(sat_map, grd_left_imgs, left_camera_k, gt_shift_u, gt_shift_v, gt_heading, mode='train', file_name=file_name)
 
+            print("loss = ", loss)
+            print("loss_decrease = ", loss_decrease)
             loss.backward()
 
             optimizer.step()  # This step is responsible for updating weights
@@ -590,6 +592,8 @@ if __name__ == '__main__':
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
+
+    print("using device: ", device)
 
     np.random.seed(2022)
 
