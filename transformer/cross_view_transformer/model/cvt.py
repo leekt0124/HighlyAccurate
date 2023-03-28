@@ -57,6 +57,6 @@ class CrossViewTransformer(nn.Module):
         # k =  'bev', [start, stop] = [0, 1]
 
         bev_dict = {k: z[:, start:stop] for k, (start, stop) in self.outputs.items()}
-        print(f'bev_dict[bev].shape {bev_dict["bev"].shape}') # [1, 1, 64, 64]
+        # print(f'bev_dict[bev].shape {bev_dict["bev"].shape}') # [1, 3, 128,  128]
         return bev_dict
         return {k: z[:, start:stop] for k, (start, stop) in self.outputs.items()}

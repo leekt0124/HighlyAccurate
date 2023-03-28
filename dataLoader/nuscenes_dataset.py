@@ -58,7 +58,7 @@ def get_data(
 
     # Format the split name
     split = f'mini_{split}' if version == 'v1.0-mini' else split
-    print(f'In get_data(): split: {split}')
+    # print(f'In get_data(): split: {split}')
     split_scenes = get_split(split, 'nuscenes')
 
     result = list()
@@ -597,22 +597,8 @@ class NuScenesDataset(torch.utils.data.Dataset):
         return sat_map, grd_imgs, intrinsics, extrinsics, \
                torch.tensor(-gt_shift_x, dtype=torch.float32).reshape(1), \
                torch.tensor(-gt_shift_y, dtype=torch.float32).reshape(1), \
-               torch.tensor(theta, dtype=torch.float32).reshape(1), \
-            #    file_name
+               torch.tensor(theta, dtype=torch.float32).reshape(1)
 
-
-
-# root_dir = '/mnt/workspace/datasets/kitti-360-SLAM' # '../../data/Kitti' # '../Data' #'..\\Data' #
-root_dir = '/home/goroyeh/nuScene_dataset'
-# samples_dir = '/samples'
-# satmap_dir = '/satmap'
-
-# GrdImg_H = 256
-# GrdImg_W = 1024
-GrdOriImg_H = 376
-GrdOriImg_W = 1408
-train_file = '../../../dataLoader/nuscenes_train.txt'
-test_file = '../../../dataLoader/nuscenes_test.txt'
 
 def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat, shift_range_lon, rotation_range, root_dir):
     

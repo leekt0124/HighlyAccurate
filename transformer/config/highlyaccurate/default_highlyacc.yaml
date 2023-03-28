@@ -49,7 +49,7 @@ beta2: 0.999
 use_default_model: 0
 use_transformer: True
 
-version: "v1.0-mini"
+version: ${data.version}
 # version: "v1.0-trainval" # or v1.0-mini (Only 10 scenes)
 # For nuscenes_dataset.py
 # dataset_dir: "/home/goroyeh/nuScene_dataset/media/datasets/nuscenes"

@@ -364,12 +364,11 @@ def test2(mini_batch, net_test, args, save_path, best_rank_result, epoch):
 def train(net, lr, args, mini_batch, device, save_path):
     bestRankResult = 0.0  # current best, Siam-FCANET18
     # loop over the dataset multiple times
-    print(args.resume)
-    print(args.epochs)
+    print(f'resume: {args.resume}')
+    print(f'epochs: {args.epochs}')
     for epoch in range(args.resume, args.epochs):
         net.train()
 
-        # base_lr = 0
         base_lr = lr
         base_lr = base_lr * ((1.0 - float(epoch) / 100.0) ** (1.0))
 
@@ -382,10 +381,7 @@ def train(net, lr, args, mini_batch, device, save_path):
 
         optimizer.zero_grad()
 
-        ### feeding A and P into train loader
-        
-        print(f'args.dataset_dir: {args.dataset_dir}')
-        print(f'args.labels_dir: {args.labels_dir}')        
+        ### feeding A and P into train loader     
         trainloader = load_train_data(args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir,  args.loader, mini_batch,\
                                       args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir)
 
@@ -403,10 +399,8 @@ def train(net, lr, args, mini_batch, device, save_path):
             # print(f'device: {device}')
             # get the inputs
             sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in Data]
-
-            # TODO: remove file_name from the network forward function
-            file_name = "temp"
-
+            # print(f'gt_shift_u.shape {gt_shift_u.shape}') # (1, 1)
+            
             # zero the parameter gradients
             optimizer.zero_grad()
      
@@ -415,13 +409,13 @@ def train(net, lr, args, mini_batch, device, save_path):
                 loss, loss_decrease, shift_lat_decrease, shift_lon_decrease, thetas_decrease, loss_last, \
                 shift_lat_last, shift_lon_last, theta_last, \
                 L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list = \
-                    net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, mode='train', file_name=file_name,
+                    net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, mode='train',
                         loop=Loop, level_first=args.level_first)
             elif args.direction =='G2SP':
                 loss, loss_decrease, shift_lat_decrease, shift_lon_decrease, thetas_decrease, loss_last, \
                 shift_lat_last, shift_lon_last, theta_last, \
                 L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list = \
-                    net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, mode='train', file_name=file_name)
+                    net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, mode='train',)
 
             print("loss = ", loss)
             print("loss_drcrease = ", loss_decrease)
@@ -486,75 +480,10 @@ def train(net, lr, args, mini_batch, device, save_path):
     print('Finished Training')
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--resume', type=int, default=0, help='resume the trained model')
-    parser.add_argument('--test', type=int, default=0, help='test with trained model')
-    parser.add_argument('--localize', type=int, default=0, help='localize with trained model')
-    parser.add_argument('--debug', type=int, default=0, help='debug to dump middle processing images')
-
-    parser.add_argument('--epochs', type=int, default=5, help='number of training epochs')
-
-    parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')  # 1e-2
-
-    parser.add_argument('--stereo', type=int, default=0, help='use left and right ground image')
-    parser.add_argument('--sequence', type=int, default=1, help='use n images merge to 1 ground image')
-
-    parser.add_argument('--rotation_range', type=float, default=10., help='degree')
-    parser.add_argument('--shift_range_lat', type=float, default=20., help='meters')
-    parser.add_argument('--shift_range_lon', type=float, default=20., help='meters')
-
-    parser.add_argument('--coe_shift_lat', type=float, default=100., help='meters')
-    parser.add_argument('--coe_shift_lon', type=float, default=100., help='meters')
-    parser.add_argument('--coe_heading', type=float, default=100., help='degree')
-    parser.add_argument('--coe_L1', type=float, default=100., help='feature')
-    parser.add_argument('--coe_L2', type=float, default=100., help='meters')
-    parser.add_argument('--coe_L3', type=float, default=100., help='degree')
-    parser.add_argument('--coe_L4', type=float, default=100., help='feature')
-
-    parser.add_argument('--metric_distance', type=float, default=5., help='meters')
-
-    parser.add_argument('--batch_size', type=int, default=3, help='batch size')
-    parser.add_argument('--loss_method', type=int, default=0, help='0, 1, 2, 3')
-
-    parser.add_argument('--level', type=int, default=3, help='2, 3, 4, -1, -2, -3, -4')
-    parser.add_argument('--N_iters', type=int, default=5, help='any integer')
-    parser.add_argument('--using_weight', type=int, default=0, help='weighted LM or not')
-    parser.add_argument('--damping', type=float, default=0.1, help='coefficient in LM optimization')
-    parser.add_argument('--train_damping', type=int, default=0, help='coefficient in LM optimization')
-
-    # parameters below are used for the first-step metric learning traning
-    parser.add_argument('--negative_samples', type=int, default=32, help='number of negative samples '
-                                                                         'for the metric learning training')
-    parser.add_argument('--use_conf_metric', type=int, default=0, help='0  or 1 ')
-
-    parser.add_argument('--direction', type=str, default='S2GP', help='G2SP' or 'S2GP')
-    parser.add_argument('--Load', type=int, default=0, help='0 or 1, load_metric_learning_weight or not')
-    parser.add_argument('--Optimizer', type=str, default='LM', help='LM or SGD or ADAM')
-
-    parser.add_argument('--level_first', type=int, default=0, help='0 or 1, estimate grd depth or not')
-    parser.add_argument('--proj', type=str, default='geo', help='geo, polar, nn')
-    parser.add_argument('--use_gt_depth', type=int, default=0, help='0 or 1')
-
-    parser.add_argument('--dropout', type=int, default=0, help='0 or 1')
-    parser.add_argument('--use_hessian', type=int, default=0, help='0 or 1')
-
-    parser.add_argument('--visualize', type=int, default=0, help='0 or 0')
-
-    parser.add_argument('--beta1', type=float, default=0.9, help='coefficients for adam optimizer')
-    parser.add_argument('--beta2', type=float, default=0.999, help='coefficients for adam optimizer')
-
-    parser.add_argument('--use_default_model', type=int, default=0, help='0 or 1')
-
-    # Add argument for transformer
-    parser.add_argument('--use_transformer', type=bool, default=False, help='whether to use transformer as feature extractor')
-
-    args = parser.parse_args()
-
-    return args
-
 
 def getSavePath(args):
+
+
     if args.test and args.use_default_model:
         save_path = '/mnt/workspace/datasets/yujiao_data/Models/ModelsKitti/LM_S2GP/lat20.0m_lon20.0m_rot10.0_Lev3_Nit5_Wei0_Dam0_Load0_LM_loss0_100.0_100.0_100.0_100.0_100.0_100.0_100.0'
     elif not args.test and args.use_default_model:
@@ -611,16 +540,11 @@ def main(cfg):
 
     np.random.seed(2022)
 
-    # args = parse_args()
-    # print(f'args.use_transformer: {args.use_transformer}')
-
     mini_batch = cfg.highlyaccurate.batch_size
-
     save_path = getSavePath(cfg.highlyaccurate)
     print(f'save_path: {save_path}')
 
     net = eval('LM_' + cfg.highlyaccurate.direction)(cfg) # class LM_S2GP
-
     ### cudaargs.epochs, args.debug)
     gc.collect()
 

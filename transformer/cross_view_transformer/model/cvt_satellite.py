@@ -37,7 +37,6 @@ class CrossViewTransformer(nn.Module):
             nn.Conv2d(dim_last, dim_max, 1))
 
     def forward(self, batch):
-        print(f'in cvt_satellite.py')
         x = self.encoder(batch)
         z = x
 
@@ -49,6 +48,6 @@ class CrossViewTransformer(nn.Module):
         # k =  'bev', [start, stop] = [0, 1]
 
         bev_dict = {k: z[:, start:stop] for k, (start, stop) in self.outputs.items()}
-        print(f'bev_dict[bev].shape {bev_dict["bev"].shape}') # [1, 1, 64, 64]
+        # print(f'bev_dict[bev].shape {bev_dict["bev"].shape}') # [1, 1, 64, 64]
         return bev_dict
         return {k: z[:, start:stop] for k, (start, stop) in self.outputs.items()}

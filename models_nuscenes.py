@@ -1189,7 +1189,11 @@ class LM_S2GP(nn.Module):
         '''
         :param sat_map: [B, C, A, A] A--> sidelength
         :param grd_img_left: [B, C, H, W]
-        :return:
+        :return: 
+                loss, 
+                loss_decrease, shift_lat_decrease, shift_lon_decrease, thetas_decrease, \
+                loss_last, shift_lat_last, shift_lon_last, theta_last, \
+                L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list
         '''
         if level_first:
             return self.forward_level_first(sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu, gt_shiftv, gt_heading, mode,
@@ -1205,39 +1209,28 @@ class LM_S2GP(nn.Module):
         :param sat_map: [B, C, A, A] A--> sidelength
         :param grd_img_left: [B, C, H, W]
         :return:
-        '''
 
-        """
 
-        sat_map:  [1, 1, 3, 512, 512]
-        grd_imgs: [1, 6, 3, 256, 1024]
+        sat_map:  [1, 1, 3, 512, 512] (config/data.satellite_image.h/w)
+        grd_imgs: [1, 6, 3, 224, 480] (config/data.image.h/w)
 
-        sat_feat: [1, 3, 200, 200]
+        sat_feat: [1, 3, 200, 200] (200 is defined in config/data.bev.h/w)
         grd_feat: [1, 3, 200, 200]
 
-        1. If batch_size = 4: kernel attention has problem (satellite net)
+        * If batch_size = 4: kernel attention has problem (satellite net)
+      
+        '''
 
-        Input for GrdFeatureNet: dict
-        {image: tensor of shape [B,C,A,A],
-         intrinsics: tensor of shape B, N, 3, 3 (B=1, N=6) 
-         extrinsicx: tensor of shape B, N, 4, 4}        
-        """
-
-        # sat_map.unsqueeze(1) : add one dimension for dimension 1 (from left->right)
-        # Note: extrinsics should reshape to (1, 1, 4, 4)
-        # TODO: Ignore I/E, pass sat_map to only BACKBONE network! What should be intrinsics and extrinsics
-
+        # ---------- Satellite Network ------------- #
+        # Note: I/E is not used in sat_feat generation
         satnet_input = {'image': sat_map.unsqueeze(1),  'intrinsics': torch.eye(3,device=sat_map.device), 'extrinsics': torch.eye(4, device=sat_map.device).reshape(1, 1, 4, 4)}
         sat_feat_dict= self.SatFeatureNet(satnet_input)
         sat_feat_list = []
         for _ in range(len(sat_feat_dict)):
             sat_feat_list.append(sat_feat_dict['bev'])
-
-        conf_tensor = torch.ones([1, 1, 64, 64])
-        scale = 0.1
-        sat_conf_list = torch.ones_like(conf_tensor, device=sat_map.device)*scale
-
-
+        B, C, H, W = sat_feat_list[0].shape
+        
+        # ---------- GroundImgs Network ------------- #
         grdnet_input = {'image': grd_imgs, 'intrinsics': intrinsics, 'extrinsics':extrinsics}
         grd_feat_dict = self.GrdFeatureNet(grdnet_input)
         grd_feat_list = []
@@ -1245,27 +1238,12 @@ class LM_S2GP(nn.Module):
             grd_feat_list.append(grd_feat_dict['bev']) # (1, 3, 64, 64) 
         
         # TODO: Modify grd_conf_list
+        conf_tensor = torch.ones([1, 1, H, W])
         scale = 0.1
+        sat_conf_list = torch.ones_like(conf_tensor, device=sat_map.device)*scale        
         grd_conf_list = torch.ones_like(conf_tensor, device=sat_map.device)*scale
 
-
-        '''
-            grd_feat_dict: a dictionary of feature given different level
-            Defined in config/model/gkt.yaml 
-            (bev: [0,1])
-            grd_feat_dict['bev']: shape([1,1,200,200]) => shape in 200x200
-
-            TODO: return a list of tensors for grd_feat_list
-            level: 0, 1, 2 => 
-
-        '''
-        # print(f'grd_feat_dict["bev]:  {(grd_feat_dict["bev"].shape)}') # (1, 256, 64, 64)
-        # print(f'grd_conf_list.shape     {grd_conf_list.shape}')        
-
-        # sat_feat_list, sat_conf_list = self.SatFeatureNet(sat_map)
-        # grd_feat_list, grd_conf_list = self.GrdFeatureNet(grd_img_left)
-        # print(f'sat_map.device: {sat_map.device}') # cuda:0
-        B, C, H, W = sat_feat_list[0].shape
+        # ---------- shift_u, shif_v, heading initialization -------------------------------------- #
         shift_u = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
         shift_v = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
         heading = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
@@ -1282,65 +1260,40 @@ class LM_S2GP(nn.Module):
             shift_vs = []
             headings = []
             for level in range(len(sat_feat_list)):
-                sat_feat = sat_feat_list[level]
-                print("sat_feat.shape = ", sat_feat.shape) # sat_feat.shape =  torch.Size([1, 64, 64, 64])
-                sat_feat_last_two_dim = sat_feat[0, -3:, :, :] # (3, 64, 64)
-                print(f'sat_feat_last_two_dim.shape {sat_feat_last_two_dim.shape}')
-                save_image(sat_feat_last_two_dim, 'sat_feat.png')
 
-                test_tensor = torch.randint_like(sat_feat_last_two_dim, low=0, high=255)
+                sat_feat = sat_feat_list[level]
+                # print("sat_feat.shape = ", sat_feat.shape) # sat_feat.shape =  torch.Size([1, 3, 128, 128)
+                sat_feat_last_3_dim = sat_feat[0, -3:, :, :] # (3, 128, 128)
+                # print(f'sat_feat_last_3_dim.shape {sat_feat_last_3_dim.shape}')
+                save_image(sat_feat_last_3_dim, 'sat_feat.png')
+
+                test_tensor = torch.randint_like(sat_feat_last_3_dim, low=0, high=255)
                 save_image(test_tensor, "test_tensor.png")
 
-                test2_tensor = torch.rand_like(sat_feat_last_two_dim)
+                test2_tensor = torch.rand_like(sat_feat_last_3_dim)
                 save_image(test2_tensor, "test2_tensor.png")
 
                 sat_conf = sat_conf_list[level]
                 grd_feat = grd_feat_list[level]
-
-                # print("grd_feat.shape = ", grd_feat.shape) # grd_feat.shape =  torch.Size([1, 64, 64, 64])
-
-                grd_feat_last_two_dim = grd_feat[0, -3:, :, :]
-                # print("grd_feat_last_two_dim = ", grd_feat_last_two_dim)
-                # print(f'grd_feat_last_two_dim.shape {grd_feat_last_two_dim.shape}')
-                save_image(grd_feat_last_two_dim, "grd_feat.png")
+                grd_feat_last_3_dim = grd_feat[0, -3:, :, :]
+                save_image(grd_feat_last_3_dim, "grd_feat.png")
 
                 grd_conf = grd_conf_list[level]
-
                 grd_H, grd_W = grd_feat.shape[-2:]
 
 
-                # sat_feat_proj, sat_conf_proj, dfeat_dpose, sat_uv, mask = self.project_map_to_grd(
-                #     sat_feat, sat_conf, shift_u, shift_v, heading, level, gt_depth=gt_depth)
                 sat_feat_proj = sat_feat      
 
                 small_const = 0.1
                 sat_uv        = torch.ones([1, 1, 1, 2], device=sat_map.device) * small_const
                 # [B, C, H, W], [B, 1, H, W], [3, B, C, H, W], [B, H, W, 2]
-
-                # grd_feat = grd_feat * mask[:, None, :, :]
-                # grd_conf = grd_conf * mask[:, None, :, :]
-
-                # if self.args.proj == 'geo':
-                #     sat_feat_new = sat_feat_proj[:, :, grd_H // 2:, :]
-                #     sat_conf_new = sat_conf_proj[:, :, grd_H // 2:, :]
-                #     grd_feat_new = grd_feat[:, :, grd_H // 2:, :]
-                #     grd_conf_new = grd_conf[:, :, grd_H // 2:, :]
-                #     dfeat_dpose_new = dfeat_dpose[:, :, :, grd_H // 2:, :]
-                # else:
-                #     sat_feat_new = sat_feat_proj
-                #     sat_conf_new = sat_conf_proj
-                #     grd_feat_new = grd_feat
-                #     grd_conf_new = grd_conf
-                #     dfeat_dpose_new = dfeat_dpose
-
  
                 sat_feat_new = sat_feat
                 sat_conf_new = sat_conf
                 grd_feat_new = grd_feat
                 grd_conf_new = grd_conf
-                # print(f'sat_feat.shape {sat_feat.shape}')
-                # B, C, H, W = sat_feat.shape
-                # TODO: should not be zero
+
+                # Key element for LM update!
                 dfeat_dpose_new = torch.ones([3, B, C, H, W], device=shift_u.device) #dfeat_dpose               
 
                 if self.args.Optimizer == 'LM':
@@ -1352,17 +1305,17 @@ class LM_S2GP(nn.Module):
                                                             grd_conf_new,
                                                             dfeat_dpose_new)  # only need to compare bottom half
                 elif self.args.Optimizer == 'SGD':
-                    # r = sat_feat_proj[:, :, grd_H // 2:, :] - grd_feat[:, :, grd_H // 2:, :]
-                    # p = torch.mean(torch.abs(r), dim=[1, 2, 3])  # *100 #* 256 * 256 * 3
-                    # dp_dshiftu = torch.autograd.grad(p, shift_u, retain_graph=True, create_graph=True,
-                    #                              only_inputs=True)[0]
-                    # dp_dshiftv = torch.autograd.grad(p, shift_v, retain_graph=True, create_graph=True,
-                    #                                  only_inputs=True)[0]
-                    # dp_dheading = torch.autograd.grad(p, heading, retain_graph=True, create_graph=True,
-                    #                                 only_inputs=True)[0]
-                    # print(dp_dshiftu)
-                    # print(dp_dshiftv)
-                    # print(dp_dheading)
+                    r = sat_feat_proj[:, :, grd_H // 2:, :] - grd_feat[:, :, grd_H // 2:, :]
+                    p = torch.mean(torch.abs(r), dim=[1, 2, 3])  # *100 #* 256 * 256 * 3
+                    dp_dshiftu = torch.autograd.grad(p, shift_u, retain_graph=True, create_graph=True,
+                                                 only_inputs=True)[0]
+                    dp_dshiftv = torch.autograd.grad(p, shift_v, retain_graph=True, create_graph=True,
+                                                     only_inputs=True)[0]
+                    dp_dheading = torch.autograd.grad(p, heading, retain_graph=True, create_graph=True,
+                                                    only_inputs=True)[0]
+                    print(dp_dshiftu)
+                    print(dp_dshiftv)
+                    print(dp_dheading)
 
                     shift_u_new, shift_v_new, heading_new = self.SGD_update(shift_u, shift_v, heading,
                                                                            sat_feat_new,
@@ -1418,9 +1371,15 @@ class LM_S2GP(nn.Module):
             shift_vs_all.append(torch.stack(shift_vs, dim=1))  # [B, Level]
             headings_all.append(torch.stack(headings, dim=1))  # [B, Level]
 
+
+        # Aggregate shift_vs_all / shift_us_all / headings_all to tensors
+        # for later loss_func
         shift_lats = torch.stack(shift_vs_all, dim=1)  # [B, N_iters, Level]
         shift_lons = torch.stack(shift_us_all, dim=1)  # [B, N_iters, Level]
         thetas = torch.stack(headings_all, dim=1)  # [B, N_iters, Level]
+
+        # print(f'shift_lats.shape {shift_lats.shape}') # (1, 5, 1)
+        # print(f'gt_shiftv[:, 0].shape {gt_shiftv[:, 0].shape}') # [1]
 
         if self.args.visualize:
             from visualize_utils import features_to_RGB, RGB_iterative_pose
@@ -1605,7 +1564,7 @@ class LM_S2GP(nn.Module):
             from visualize_utils import features_to_RGB, RGB_iterative_pose
             features_to_RGB(sat_feat_list, grd_feat_list, pred_feat_dict, gt_feat_dict, loop,
                             save_dir='./visualize/')
-            RGB_iterative_pose(sat_map, grd_img_left, shift_lats, shift_lons, thetas, gt_shiftu, gt_shiftv, gt_heading,
+            RGB_iterative_pose(sat_map, grd_imgs, shift_lats, shift_lons, thetas, gt_shiftu, gt_shiftv, gt_heading,
                                self.meters_per_pixel[-1], self.args, loop, save_dir='./visualize/')
 
 
