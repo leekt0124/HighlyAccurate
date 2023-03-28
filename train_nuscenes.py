@@ -35,11 +35,11 @@ from models_nuscenes import LM_G2SP, loss_func, LM_S2GP
 import gc
 
 ########################### ranking test ############################
-def localize(net_localize, args, mini_batch, device, save_path, best_rank_result, epoch):
+def localize(net_localize, args,  device, save_path, best_rank_result, epoch):
     print("Runing localization pipeline")
     LOCALIZE_FILE = ""
     net_localize.eval()
-    dataloader = load_localize_data(mini_batch, args.shift_range_lat, args.shift_range_lon, args.rotation_range)
+    dataloader = load_localize_data( args.shift_range_lat, args.shift_range_lon, args.rotation_range)
     
     start_time = time.time()
     for i, data in enumerate(dataloader):
@@ -58,10 +58,10 @@ def localize(net_localize, args, mini_batch, device, save_path, best_rank_result
             shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_left_imgs, left_camera_k, mode='test')
 
 
-def test1(mini_batch, net_test, args, save_path, best_rank_result, epoch, device):
+def test1( net_test, args, save_path, best_rank_result, epoch, device):
     ### net evaluation state
     net_test.eval()
-    dataloader = load_val_data(args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir, args.loader, mini_batch, \
+    dataloader = load_val_data(args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir, args.loader, \
                                args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir)
     pred_shifts = []
     pred_headings = []
@@ -217,11 +217,11 @@ def test1(mini_batch, net_test, args, save_path, best_rank_result, epoch, device
     return result
 
 
-def test2(mini_batch, net_test, args, save_path, best_rank_result, epoch):
+def test2(net_test, args, save_path, best_rank_result, epoch,  device):
     ### net evaluation state
     net_test.eval()
 
-    dataloader = load_test2_data(mini_batch, args.shift_range_lat, args.shift_range_lon, args.rotation_range)
+    dataloader = load_test2_data(args.shift_range_lat, args.shift_range_lon, args.rotation_range)
     pred_shifts = []
     pred_headings = []
     gt_shifts = []
@@ -361,7 +361,7 @@ def test2(mini_batch, net_test, args, save_path, best_rank_result, epoch):
 
 
 ###### learning criterion assignment #######
-def train(net, lr, args, mini_batch, device, save_path):
+def train(net, lr, args, device, save_path):
     bestRankResult = 0.0  # current best, Siam-FCANET18
     # loop over the dataset multiple times
     print(f'resume: {args.resume}')
@@ -382,14 +382,16 @@ def train(net, lr, args, mini_batch, device, save_path):
         optimizer.zero_grad()
 
         ### feeding A and P into train loader     
-        trainloader = load_train_data(args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir,  args.loader, mini_batch,\
+        trainloader = load_train_data(args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir,  args.loader, \
                                       args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir)
 
         loss_vec = []
 
-        print('batch_size:', mini_batch, '\n num of batches:', len(trainloader))
+        # For v1.0-trainval: batch_size:  4 => num of batches: 7033
+        print(f'batch_size:  {args.loader.batch_size}\nnum of batches: {len(trainloader)}')
 
         for Loop, Data in enumerate(trainloader, 0):
+
             # Early stopping (leekt)
             # if Loop > 10:
             #     break
@@ -399,7 +401,7 @@ def train(net, lr, args, mini_batch, device, save_path):
             # print(f'device: {device}')
             # get the inputs
             sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in Data]
-            # print(f'gt_shift_u.shape {gt_shift_u.shape}') # (1, 1)
+            # gt_shift_u.shape: (1, 1) (batch_size, )
             
             # zero the parameter gradients
             optimizer.zero_grad()
@@ -417,8 +419,8 @@ def train(net, lr, args, mini_batch, device, save_path):
                 L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list = \
                     net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, mode='train',)
 
-            print("loss = ", loss)
-            print("loss_drcrease = ", loss_decrease)
+            # print("loss = ", loss)
+            # print("loss_drcrease = ", loss_decrease)
             loss.backward()
 
             optimizer.step()  # This step is responsible for updating weights
@@ -471,11 +473,11 @@ def train(net, lr, args, mini_batch, device, save_path):
         torch.save(net.state_dict(), os.path.join(save_path, 'model_' + str(compNum) + '.pth'))
 
         ### ranking test        
-        current = test1(mini_batch, net, args, save_path, bestRankResult, epoch, device)
+        current = test1(net, args, save_path, bestRankResult, epoch, device)
         if (current > bestRankResult):
             bestRankResult = current
 
-        # test2(net, args, save_path, bestRankResult, epoch)
+        # test2(net, args, save_path, bestRankResult, epoch, device)
 
     print('Finished Training')
 
@@ -540,7 +542,6 @@ def main(cfg):
 
     np.random.seed(2022)
 
-    mini_batch = cfg.highlyaccurate.batch_size
     save_path = getSavePath(cfg.highlyaccurate)
     print(f'save_path: {save_path}')
 
@@ -554,7 +555,7 @@ def main(cfg):
 
     if cfg.highlyaccurate.localize:
         net.load_state_dict(torch.load(os.path.join(save_path, 'Model_best.pth')))
-        localize(net, cfg.highlyaccurate, mini_batch, device, save_path, 0., epoch=0)
+        localize(net, cfg.highlyaccurate, device, save_path, 0., epoch=0)
     else:
         if cfg.highlyaccurate.test:
             net.load_state_dict(torch.load(os.path.join(save_path, 'Model_best.pth')))
@@ -574,7 +575,7 @@ def main(cfg):
 
             lr = cfg.highlyaccurate.lr
 
-            train(net, lr, cfg.highlyaccurate, mini_batch, device, save_path)
+            train(net, lr, cfg.highlyaccurate, device, save_path)
 
 
 if __name__ == '__main__':

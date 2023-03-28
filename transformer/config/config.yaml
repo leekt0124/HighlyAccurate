@@ -21,16 +21,15 @@ experiment:
   log_image_interval: 500
   ckptt: "-"
 
-# loader:
-#   batch_size: 1
-#   # batch_size: 4
-#   num_workers: 4
-#   pin_memory: True
-#   prefetch_factor: 45
+loader:
+  batch_size: 4
+  num_workers: 4
+  pin_memory: True
+  prefetch_factor: 45
 
 # AdamW
 optimizer:
-  lr: 4e-3
+  # lr: 4e-3
   weight_decay: 1e-7
 
 # OneCycleLR

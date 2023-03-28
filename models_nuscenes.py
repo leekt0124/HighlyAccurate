@@ -604,10 +604,10 @@ CONFIG_NAME = 'config.yaml'
 
 def setup_network(cfg, type):
     if type=='satellite':
-        print(f'Setup Backbone Network for {type}: {cfg.satellite_model}')        
+        # print(f'Setup Backbone Network for {type}: {cfg.satellite_model}')        
         return instantiate(cfg.satellite_model)
     else:
-        print(f'Setup Backbone Network for {type}: {cfg.model}')
+        # print(f'Setup Backbone Network for {type}: {cfg.model}')
         return instantiate(cfg.model)
 
 
@@ -1238,10 +1238,10 @@ class LM_S2GP(nn.Module):
             grd_feat_list.append(grd_feat_dict['bev']) # (1, 3, 64, 64) 
         
         # TODO: Modify grd_conf_list
-        conf_tensor = torch.ones([1, 1, H, W])
+        conf_tensor = torch.ones([B, 1, H, W])
         scale = 0.1
-        sat_conf_list = torch.ones_like(conf_tensor, device=sat_map.device)*scale        
-        grd_conf_list = torch.ones_like(conf_tensor, device=sat_map.device)*scale
+        sat_conf_list = [torch.ones_like(conf_tensor, device=sat_map.device)*scale ]       
+        grd_conf_list = [torch.ones_like(conf_tensor, device=sat_map.device)*scale ]
 
         # ---------- shift_u, shif_v, heading initialization -------------------------------------- #
         shift_u = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
@@ -1262,9 +1262,8 @@ class LM_S2GP(nn.Module):
             for level in range(len(sat_feat_list)):
 
                 sat_feat = sat_feat_list[level]
-                # print("sat_feat.shape = ", sat_feat.shape) # sat_feat.shape =  torch.Size([1, 3, 128, 128)
+                # print(f'sat_feat.shape {sat_feat.shape}')
                 sat_feat_last_3_dim = sat_feat[0, -3:, :, :] # (3, 128, 128)
-                # print(f'sat_feat_last_3_dim.shape {sat_feat_last_3_dim.shape}')
                 save_image(sat_feat_last_3_dim, 'sat_feat.png')
 
                 test_tensor = torch.randint_like(sat_feat_last_3_dim, low=0, high=255)

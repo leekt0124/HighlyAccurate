@@ -600,7 +600,7 @@ class NuScenesDataset(torch.utils.data.Dataset):
                torch.tensor(theta, dtype=torch.float32).reshape(1)
 
 
-def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat, shift_range_lon, rotation_range, root_dir):
+def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, shift_range_lat, shift_range_lon, rotation_range, root_dir):
     
     SatMap_process_sidelength = utils.get_process_satmap_sidelength()
 
@@ -638,7 +638,7 @@ def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader
     return train_loader
 
 
-def load_val_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, batch_size, shift_range_lat, shift_range_lon, rotation_range, root_dir):
+def load_val_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, shift_range_lat, shift_range_lon, rotation_range, root_dir):
         
         SatMap_process_sidelength = utils.get_process_satmap_sidelength()
 

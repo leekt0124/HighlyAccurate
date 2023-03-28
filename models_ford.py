@@ -1076,20 +1076,24 @@ def loss_func(loss_method, ref_feat_list, pred_feat_dict, gt_feat_dict, shift_la
     shift_lon_delta0 = torch.abs(shift_lons - gt_shift_lon[:, None, None])  # [B, N_iters, Level]
     thetas_delta0 = torch.abs(thetas - gt_theta[:, None, None])  # [B, N_iters, level]
 
-    shift_lat_delta = torch.mean(shift_lat_delta0, dim=0)  # [N_iters, Level]
+    # Average over 'Batch' shift_lats_delta0
+    shift_lat_delta = torch.mean(shift_lat_delta0, dim=0)  # [N_iters, Level] 
     shift_lon_delta = torch.mean(shift_lon_delta0, dim=0)  # [N_iters, Level]
     thetas_delta = torch.mean(thetas_delta0, dim=0)  # [N_iters, level]
 
+    # print(f'shift_lat_delta.shape {shift_lat_delta.shape} ')       # (5, 1)
+    # print(f'shift_lat_delta[0].shape {shift_lat_delta[0].shape} ') # (1)
+
     shift_lat_decrease = shift_lat_delta[0] - shift_lat_delta[-1]  # [level]
     shift_lon_decrease = shift_lon_delta[0] - shift_lon_delta[-1]  # [level]
-    thetas_decrease = thetas_delta[0] - thetas_delta[-1]  # [level]
+    thetas_decrease = thetas_delta[0] - thetas_delta[-1]           # [level]
 
     if loss_method == 0:
         losses = coe_shift_lat * shift_lat_delta + coe_shift_lon * shift_lon_delta + coe_theta * thetas_delta  # [N_iters, level]
-        print("losses (in models_ford.py) = ", losses)
+        # print("losses (in models_ford.py) = ", losses)
 
         loss_decrease = losses[0] - losses[-1]  # [level]
-        loss = torch.mean(losses)  # mean or sum
+        loss = torch.mean(losses)               # mean or sum
         loss_last = losses[-1]
 
         return loss, loss_decrease, shift_lat_decrease, shift_lon_decrease, thetas_decrease, loss_last, \
