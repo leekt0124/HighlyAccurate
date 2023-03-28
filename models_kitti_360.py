@@ -640,6 +640,7 @@ class LM_S2GP(nn.Module):
 
         self.meters_per_pixel = []
         meter_per_pixel = utils.get_meter_per_pixel()
+        print("meter_per_pixel = ", meter_per_pixel)
         for level in range(4):
             self.meters_per_pixel.append(meter_per_pixel * (2 ** (3 - level)))
 
@@ -723,6 +724,8 @@ class LM_S2GP(nn.Module):
         heading = ori_heading * self.args.rotation_range / 180 * np.pi
         shift_u = ori_shift_u * self.args.shift_range_lon
         shift_v = ori_shift_v * self.args.shift_range_lat
+
+        print("shift_u.shape = ", shift_u.shape)
 
         cos = torch.cos(heading)
         sin = torch.sin(heading)
@@ -958,6 +961,11 @@ class LM_S2GP(nn.Module):
         Returns:
 
         '''
+
+        # Check shapes (leekt):
+        # print("sat_feat_proj.shape = ", sat_feat_proj.shape) # eg: (B, 256, 16, 128) [Coarse to fine]
+        # print("dfeat_dpose.shape = ", dfeat_dpose.shape) # eg: (3, B, 256, 16, 128) 
+
         if self.args.rotation_range == 0:
             dfeat_dpose = dfeat_dpose[:2, ...]
         elif self.args.shift_range_lat == 0 and self.args.shift_range_lon == 0:
@@ -1189,58 +1197,58 @@ class LM_S2GP(nn.Module):
             for level in range(len(sat_feat_list)):
                 sat_feat = sat_feat_list[level]
                 sat_conf = sat_conf_list[level]
-                # print("sat_conf.shape = ", sat_conf.shape)
+                print("sat_conf.shape = ", sat_conf.shape)
                 grd_feat = grd_feat_list[level]
                 grd_conf = grd_conf_list[level]
-                # print("grd_conf.shape = ", grd_conf.shape)
+                print("grd_conf.shape = ", grd_conf.shape)
 
-                # Visualize weights
-                # sat_feat
-                # print("sat_feat.shape = ", sat_feat.shape) # (1, 256, 64, 64) 
-                C_sat, H_sat, W_sat = sat_feat.squeeze(0).shape
-                B_sat = C_sat // 3
-                sat_feat_visualize = sat_feat.squeeze(0)[:B_sat * 3]
-                sat_feat_visualize = sat_feat_visualize.reshape(B_sat, 3, H_sat, W_sat)
-                nrow = math.ceil(math.sqrt(sat_feat_visualize.shape[0]))
-                grid = make_grid(sat_feat_visualize, nrow=nrow, padding=1, normalize=True, scale_each=False)
-                plt.imshow(grid.to(device='cpu').permute(1, 2, 0))
-                plt.axis('off')
-                plt.gcf().set_size_inches(5, 5)
-                plt.show()
-                plt.savefig('sat_feat.png')
+                # # Visualize weights
+                # # sat_feat
+                # # print("sat_feat.shape = ", sat_feat.shape) # (1, 256, 64, 64) 
+                # _, C_sat, H_sat, W_sat = sat_feat.shape
+                # B_sat = C_sat // 3
+                # sat_feat_visualize = sat_feat[:, :B_sat * 3]
+                # sat_feat_visualize = sat_feat_visualize.reshape(B_sat, 3, H_sat, W_sat)
+                # nrow = math.ceil(math.sqrt(sat_feat_visualize.shape[0]))
+                # grid = make_grid(sat_feat_visualize, nrow=nrow, padding=1, normalize=True, scale_each=False)
+                # plt.imshow(grid.to(device='cpu').permute(1, 2, 0))
+                # plt.axis('off')
+                # plt.gcf().set_size_inches(5, 5)
+                # # plt.show()
+                # plt.savefig('sat_feat.png')
 
-                # grd_feat
-                # print("grd_feat.shape = ", grd_feat.shape) # (1, 256, 64, 64) 
-                C_grd, H_grd, W_grd = grd_feat.squeeze(0).shape
-                B_grd = C_grd // 3
-                grd_feat_visualize = grd_feat.squeeze(0)[:B_grd * 3]
-                grd_feat_visualize = grd_feat_visualize.reshape(B_grd, 3, H_grd, W_grd)
-                nrow = math.ceil(math.sqrt(grd_feat_visualize.shape[0]))
-                grid = make_grid(grd_feat_visualize, nrow=nrow, padding=1, normalize=True, scale_each=False)
-                plt.imshow(grid.to(device='cpu').permute(1, 2, 0))
-                plt.axis('off')
-                plt.gcf().set_size_inches(5, 5)
-                plt.show()
-                plt.savefig('grd_feat.png')
+                # # grd_feat
+                # # print("grd_feat.shape = ", grd_feat.shape) # (1, 256, 64, 64) 
+                # _, C_grd, H_grd, W_grd = grd_feat.shape
+                # B_grd = C_grd // 3
+                # grd_feat_visualize = grd_feat[:, :B_grd * 3]
+                # grd_feat_visualize = grd_feat_visualize.reshape(B_grd, 3, H_grd, W_grd)
+                # nrow = math.ceil(math.sqrt(grd_feat_visualize.shape[0]))
+                # grid = make_grid(grd_feat_visualize, nrow=nrow, padding=1, normalize=True, scale_each=False)
+                # plt.imshow(grid.to(device='cpu').permute(1, 2, 0))
+                # plt.axis('off')
+                # plt.gcf().set_size_inches(5, 5)
+                # # plt.show()
+                # plt.savefig('grd_feat.png')
 
                 grd_H, grd_W = grd_feat.shape[-2:]
                 sat_feat_proj, sat_conf_proj, dfeat_dpose, sat_uv, mask = self.project_map_to_grd(
                     sat_feat, sat_conf, shift_u, shift_v, heading, level, gt_depth=gt_depth)
                 # [B, C, H, W], [B, 1, H, W], [3, B, C, H, W], [B, H, W, 2]
 
-                # sat_feat_proj
-                # print("grd_feat.shape = ", grd_feat.shape) # (1, 256, 64, 64) 
-                C_grd, H_grd, W_grd = sat_feat_proj.squeeze(0).shape
-                B_grd = C_grd // 3
-                sat_feat_proj_visualize = sat_feat_proj.squeeze(0)[:B_grd * 3]
-                sat_feat_proj_visualize = sat_feat_proj_visualize.reshape(B_grd, 3, H_grd, W_grd)
-                nrow = math.ceil(math.sqrt(sat_feat_proj_visualize.shape[0]))
-                grid = make_grid(sat_feat_proj_visualize, nrow=nrow, padding=1, normalize=True, scale_each=False)
-                plt.imshow(grid.to(device='cpu').permute(1, 2, 0))
-                plt.axis('off')
-                plt.gcf().set_size_inches(5, 5)
-                plt.show()
-                plt.savefig('sat_feat_proj.png')
+                # # sat_feat_proj
+                # # print("grd_feat.shape = ", grd_feat.shape) # (1, 256, 64, 64) 
+                # _, C_grd, H_grd, W_grd = sat_feat_proj.shape
+                # B_grd = C_grd // 3
+                # sat_feat_proj_visualize = sat_feat_proj[:, :B_grd * 3]
+                # sat_feat_proj_visualize = sat_feat_proj_visualize.reshape(B_grd, 3, H_grd, W_grd)
+                # nrow = math.ceil(math.sqrt(sat_feat_proj_visualize.shape[0]))
+                # grid = make_grid(sat_feat_proj_visualize, nrow=nrow, padding=1, normalize=True, scale_each=False)
+                # plt.imshow(grid.to(device='cpu').permute(1, 2, 0))
+                # plt.axis('off')
+                # plt.gcf().set_size_inches(5, 5)
+                # # plt.show()
+                # plt.savefig('sat_feat_proj.png')
 
                 grd_feat = grd_feat * mask[:, None, :, :]
                 grd_conf = grd_conf * mask[:, None, :, :]
