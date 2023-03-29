@@ -395,6 +395,12 @@ def train(net, lr, args, device, save_path, model_save_path):
         last_model_save_path = model_save_path
 
         for Loop, Data in enumerate(trainloader, 0):
+            # print("len(Data) = ", len(Data))
+            # print("Loop = ", Loop)
+
+            # if Loop > 5:
+            #     import sys
+            #     sys.exit()
 
             # Early stopping (leekt)
             # if Loop > 10:

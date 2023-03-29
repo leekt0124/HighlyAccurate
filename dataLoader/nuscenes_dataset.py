@@ -22,6 +22,9 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
+from torchvision.utils import save_image
+
+
 
 import sys
 sys.path.append("..")
@@ -101,6 +104,7 @@ def get_split_data(version, dataset_dir, labels_dir, transform, shift_range_lat,
 
     # Concatenate a list of NuScenesDataset => one dataset
     dataset = torch.utils.data.ConcatDataset(datasets)
+    # print("len(dataset) = ", len(dataset))
 
     loader_config = dict(loader_config)
 
@@ -587,6 +591,9 @@ class NuScenesDataset(torch.utils.data.Dataset):
         heading = sample['yaw']
         heading = torch.from_numpy(np.asarray(heading))
         
+        # save_image(sat_map, 'sat_map_origin.png')
+        sat_map.save(f'sat_map_origin_{idx}.png')
+        print(sat_map_filename, idx)
         sat_rot = sat_map.rotate(-heading / np.pi * 180)
         sat_align_cam = sat_rot.transform(sat_rot.size, Image.AFFINE,
                                           (1, 0, utils.CameraGPS_shift_left[0] / meter_per_pixel,
@@ -620,6 +627,8 @@ class NuScenesDataset(torch.utils.data.Dataset):
         # transform
         if self.satmap_transform is not None:
             sat_map = self.satmap_transform(sat_map)
+
+        save_image(sat_map, f'sat_map_{idx}.png')
 
         # grd_left_imgs[0] : shape (3, 256, 1024) (C, H, W)
         return sat_map, grd_imgs, intrinsics, extrinsics, \

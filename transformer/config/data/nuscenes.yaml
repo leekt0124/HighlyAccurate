@@ -2,7 +2,8 @@ dataset: 'nuscenes_generated'           # do not modify :)
 num_classes: 12                         # do not modify :)
 
 # used to get_split
-version: 'v1.0-trainval'                # 'v1.0-mini' for debugging
+# version: 'v1.0-trainval'                # 'v1.0-mini' for debugging
+version: 'v1.0-mini'                # 'v1.0-mini' for debugging
 dataset_dir: ???
 labels_dir: ???
 

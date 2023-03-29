@@ -23,9 +23,9 @@ experiment:
 
 loader:
   batch_size: 4
-  num_workers: 4
+  num_workers: 1
   pin_memory: True
-  prefetch_factor: 45
+  prefetch_factor: 2
 
 # AdamW
 optimizer:
