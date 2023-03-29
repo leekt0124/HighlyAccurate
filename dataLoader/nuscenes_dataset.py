@@ -590,51 +590,62 @@ class NuScenesDataset(torch.utils.data.Dataset):
             
         heading = sample['yaw']
         heading = torch.from_numpy(np.asarray(heading))
+
+        print("heading = ", heading)
+        print("sat_map deg = ", -heading / np.pi * 180)
         
         # save_image(sat_map, 'sat_map_origin.png')
         sat_map.save(f'sat_map_origin_{idx}.png')
         print(sat_map_filename, idx)
-        sat_rot = sat_map.rotate(-heading / np.pi * 180)
-        sat_align_cam = sat_rot.transform(sat_rot.size, Image.AFFINE,
-                                          (1, 0, utils.CameraGPS_shift_left[0] / meter_per_pixel,
-                                           0, 1, utils.CameraGPS_shift_left[1] / meter_per_pixel),
-                                          resample=Image.BILINEAR)
+        sat_rot = sat_map.rotate(-heading / np.pi * 180 + 90) # +90 is to make vehicle direction facing up
+
+        # Currently no need since both sat and bev are centered
+        # sat_align_cam = sat_rot.transform(sat_rot.size, Image.AFFINE,
+        #                                   (1, 0, utils.CameraGPS_shift_left[0] / meter_per_pixel,
+        #                                    0, 1, utils.CameraGPS_shift_left[1] / meter_per_pixel),
+        #                                   resample=Image.BILINEAR)
+        # sat_align_cam = sat_rot
         # the homography is defined on: from target pixel to source pixel
         # now east direction is the real vehicle heading direction
 
-        # randomly generate shift
-        gt_shift_x = np.random.uniform(-1, 1)  # --> right as positive, parallel to the heading direction
-        gt_shift_y = np.random.uniform(-1, 1)  # --> up as positive, vertical to the heading direction
+        ADDING_GT_TRANSFORM = False
+        gt_shift_x = 0
+        gt_shift_y = 0
+        gt_theta = 0
+        if ADDING_GT_TRANSFORM:
+            # randomly generate shift
+            gt_shift_x = np.random.uniform(-1, 1)  # --> right as positive, parallel to the heading direction
+            gt_shift_y = np.random.uniform(-1, 1)  # --> up as positive, vertical to the heading direction
+            gt_theta = np.random.uniform(-1, 1)  # --> counter-clockwise as positive
 
         self.shift_range_pixels_lat = self.shift_range_meters_lat / meter_per_pixel  # shift range is in terms of meters
         self.shift_range_pixels_lon = self.shift_range_meters_lon / meter_per_pixel  # shift range is in terms of meters
 
         sat_rand_shift = \
-            sat_align_cam.transform(
-                sat_align_cam.size, Image.AFFINE,
+            sat_rot.transform(
+                sat_rot.size, Image.AFFINE,
                 (1, 0, gt_shift_x * self.shift_range_pixels_lon,
-                 0, 1, -gt_shift_y * self.shift_range_pixels_lat),
+                0, 1, -gt_shift_y * self.shift_range_pixels_lat),
                 resample=Image.BILINEAR)
 
-        # randomly generate roation
-        theta = np.random.uniform(-1, 1)
         sat_rand_shift_rand_rot = \
-            sat_rand_shift.rotate(theta * self.rotation_range)
-
+            sat_rand_shift.rotate(gt_theta * self.rotation_range)
+        
         sat_map =TF.center_crop(sat_rand_shift_rand_rot, utils.SatMap_process_sidelength)
-        # sat_map = np.array(sat_map, dtype=np.float32)
 
-        # transform
+        # transform (resize here)
         if self.satmap_transform is not None:
             sat_map = self.satmap_transform(sat_map)
 
         save_image(sat_map, f'sat_map_{idx}.png')
 
-        # grd_left_imgs[0] : shape (3, 256, 1024) (C, H, W)
+        # print("sat_map.shape = ", sat_map.shape) # (3, 512, 512)
+        # print("grd_imgs.shape = ", grd_imgs.shape) # (6, 3, 224, 480)
+
         return sat_map, grd_imgs, intrinsics, extrinsics, \
                torch.tensor(-gt_shift_x, dtype=torch.float32).reshape(1), \
                torch.tensor(-gt_shift_y, dtype=torch.float32).reshape(1), \
-               torch.tensor(theta, dtype=torch.float32).reshape(1), \
+               torch.tensor(gt_theta, dtype=torch.float32).reshape(1), \
                meter_per_pixel
 
 

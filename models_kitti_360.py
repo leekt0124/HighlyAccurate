@@ -1455,7 +1455,8 @@ class LM_S2GP(nn.Module):
 
         if self.args.visualize:
             from visualize_utils import features_to_RGB, RGB_iterative_pose
-            save_dir = './visualize_rot' + str(self.args.rotation_range)
+            # save_dir = './visualize_rot' + str(self.args.rotation_range)
+            save_dir = '.'
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir)
             features_to_RGB(sat_feat_list, grd_feat_list, pred_feat_dict, gt_feat_dict, loop,

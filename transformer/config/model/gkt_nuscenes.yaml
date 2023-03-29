@@ -4,7 +4,7 @@ dim_last: 64
 # dim_last: 56
 
 outputs:
-  bev: [0, 3] # rgb: 0,1,2
+  bev: [0, 10] # rgb: 0,1,2
 
 encoder:
   _target_: transformer.cross_view_transformer.model.geometry_kernel_transformer_encoder_nuscenes.GeometryKernelEncoder

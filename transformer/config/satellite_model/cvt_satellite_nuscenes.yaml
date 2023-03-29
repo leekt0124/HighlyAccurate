@@ -4,7 +4,7 @@ _target_: transformer.cross_view_transformer.model.cvt_satellite.CrossViewTransf
 dim_last: 64
 
 outputs:
-  bev: [0, 3]
+  bev: [0, 10]
 
 encoder:
   _target_: transformer.cross_view_transformer.model.encoder_satellite_nuscenes.Encoder

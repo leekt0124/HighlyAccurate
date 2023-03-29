@@ -1262,9 +1262,9 @@ class LM_S2GP(nn.Module):
             for level in range(len(sat_feat_list)):
 
                 sat_feat = sat_feat_list[level]
-                # print(f'sat_feat.shape {sat_feat.shape}')
+                print(f'sat_feat.shape {sat_feat.shape}')
                 sat_feat_last_3_dim = sat_feat[0, -3:, :, :] # (3, 128, 128)
-                save_image(sat_feat_last_3_dim, 'sat_feat.png')
+                save_image(sat_feat_last_3_dim, f'sat_feat_iter_{iter}.png')
 
                 test_tensor = torch.randint_like(sat_feat_last_3_dim, low=0, high=255)
                 save_image(test_tensor, "test_tensor.png")
@@ -1274,8 +1274,9 @@ class LM_S2GP(nn.Module):
 
                 sat_conf = sat_conf_list[level]
                 grd_feat = grd_feat_list[level]
+                print(f'grd_feat.shape = {grd_feat.shape}')
                 grd_feat_last_3_dim = grd_feat[0, -3:, :, :]
-                save_image(grd_feat_last_3_dim, "grd_feat.png")
+                save_image(grd_feat_last_3_dim, f"grd_feat_iter_{iter}.png")
 
                 grd_conf = grd_conf_list[level]
                 grd_H, grd_W = grd_feat.shape[-2:]
@@ -1382,13 +1383,14 @@ class LM_S2GP(nn.Module):
 
         if self.args.visualize:
             from visualize_utils import features_to_RGB, RGB_iterative_pose
-            save_dir = './visualize_rot' + str(self.args.rotation_range)
+            # save_dir = './visualize_rot' + str(self.args.rotation_range)
+            save_dir = '.'
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir)
             features_to_RGB(sat_feat_list, grd_feat_list, pred_feat_dict, gt_feat_dict, loop,
                             save_dir)
             RGB_iterative_pose(sat_map, grd_imgs, shift_lats, shift_lons, thetas, gt_shiftu, gt_shiftv, gt_heading,
-                               self.meters_per_pixel[-1], self.args, loop, save_dir)
+                                self.meters_per_pixel[-1], self.args, loop, save_dir)
 
 
         if mode == 'train':

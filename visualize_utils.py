@@ -77,6 +77,7 @@ def features_to_RGB(sat_feat_list, grd_feat_list, pred_feat_dict, gt_sat_feat_pr
         for idx in range(B):
             sat = Image.fromarray((sat_feat_new[idx] * 255).astype(np.uint8))
             sat = sat.resize((512, 512))
+            # print("saving -----------------------")
             sat.save(os.path.join(save_dir, 'sat_feat_' + str(loop * B + idx) + '_level_' + str(level) + '.png'))
 
             grd = Image.fromarray((grd_feat_new[idx] * 255).astype(np.uint8))

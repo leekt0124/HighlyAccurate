@@ -40,6 +40,8 @@ class CrossViewTransformer(nn.Module):
         x = self.encoder(batch)
         z = x
 
+        # print("z.shape = ", z.shape) # (B, 32, 128, 128)
+
         # print(f'cvt.py: y.shape  {y.shape}') # shape: (1, 64, 200, 200) is the bev feature!
         # z = self.to_logits(y)
 
