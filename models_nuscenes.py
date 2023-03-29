@@ -684,7 +684,7 @@ class LM_S2GP(nn.Module):
         self.xyz_grds = xyz_grds
 
         self.meters_per_pixel = []
-        meter_per_pixel = utils.get_meter_per_pixel()
+        meter_per_pixel = utils.get_meter_per_pixel() # 0.2 meter / pixel (for satellitemap)
         for level in range(4):
             self.meters_per_pixel.append(meter_per_pixel * (2 ** (3 - level)))
 
@@ -809,7 +809,7 @@ class LM_S2GP(nn.Module):
         # [B, grd_H, grd_W, 2]
         # assert zx == zx0
 
-        meter_per_pixel = utils.get_meter_per_pixel()
+        meter_per_pixel = utils.get_meter_per_pixel() # Pass MAP_ORIGINS latitude
         meter_per_pixel *= utils.get_process_satmap_sidelength() / satmap_sidelength
         sat_uv = zx/meter_per_pixel + satmap_sidelength / 2  # [B, grd_H, grd_W, 2] sat map uv
 
@@ -1184,7 +1184,7 @@ class LM_S2GP(nn.Module):
         theta_new = theta - 0.01 * delta_final[:, 2:3]
         return shift_u_new, shift_v_new, theta_new, m, v
 
-    def forward(self, sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu=None, gt_shiftv=None, gt_heading=None,  mode='train',
+    def forward(self, sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu=None, gt_shiftv=None, gt_heading=None, meter_per_pixel=None, mode='train',
                 file_name=None, gt_depth=None, loop=0, level_first=0):
         '''
         :param sat_map: [B, C, A, A] A--> sidelength
@@ -1196,14 +1196,14 @@ class LM_S2GP(nn.Module):
                 L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list
         '''
         if level_first:
-            return self.forward_level_first(sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu, gt_shiftv, gt_heading, mode,
-                file_name, gt_depth, loop)
+            return self.forward_level_first(sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu, gt_shiftv, gt_heading, meter_per_pixel, \
+                mode, file_name, gt_depth, loop)
         else:
-            return self.forward_iter_first(sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu, gt_shiftv, gt_heading,  mode,
-                file_name, gt_depth, loop)
+            return self.forward_iter_first(sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu, gt_shiftv, gt_heading, meter_per_pixel,  \
+                mode, file_name, gt_depth, loop)
 
 
-    def forward_iter_first(self, sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu=None, gt_shiftv=None, gt_heading=None, mode='train',
+    def forward_iter_first(self, sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu=None, gt_shiftv=None, gt_heading=None, meter_per_pixel=None, mode='train',
                 file_name=None, gt_depth=None, loop=0):
         '''
         :param sat_map: [B, C, A, A] A--> sidelength
@@ -1413,7 +1413,7 @@ class LM_S2GP(nn.Module):
         else:
             return shift_lats[:, -1, -1], shift_lons[:, -1, -1], thetas[:, -1, -1]
 
-    def forward_level_first(self, sat_map, grd_imgs, intrinsics_dict, extrinsics, gt_shiftu=None, gt_shiftv=None, mode='train',
+    def forward_level_first(self, sat_map, grd_imgs, intrinsics_dict, extrinsics, gt_shiftu=None, gt_shiftv=None, gt_heading=None, meter_per_pixel=None, mode='train',
                 file_name=None, gt_depth=None, loop=0):
         '''
         :param sat_map: [B, C, A, A] A--> sidelength

@@ -404,7 +404,7 @@ def train(net, lr, args, device, save_path, model_save_path):
 
             # print(f'device: {device}')
             # get the inputs
-            sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in Data]
+            sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel = [item.to(device) for item in Data]
             # gt_shift_u.shape: (1, 1) (batch_size, )
             
             # zero the parameter gradients
@@ -415,13 +415,13 @@ def train(net, lr, args, device, save_path, model_save_path):
                 loss, loss_decrease, shift_lat_decrease, shift_lon_decrease, thetas_decrease, loss_last, \
                 shift_lat_last, shift_lon_last, theta_last, \
                 L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list = \
-                    net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, mode='train',
+                    net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel, mode='train',
                         loop=Loop, level_first=args.level_first)
             elif args.direction =='G2SP':
                 loss, loss_decrease, shift_lat_decrease, shift_lon_decrease, thetas_decrease, loss_last, \
                 shift_lat_last, shift_lon_last, theta_last, \
                 L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list = \
-                    net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, mode='train',)
+                    net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel, mode='train',)
 
             # print("loss = ", loss)
             # print("loss_drcrease = ", loss_decrease)
@@ -572,6 +572,8 @@ CONFIG_PATH = Path.cwd() / 'transformer/config'
 CONFIG_NAME = 'config.yaml'
 import hydra
 
+from datetime import datetime
+
 @hydra.main(config_path=CONFIG_PATH, config_name=CONFIG_NAME)
 def main(cfg):
 
@@ -605,16 +607,22 @@ def main(cfg):
         
         else:
             date           = str(cfg.highlyaccurate.date)  # e.g. 0328
+            cur_datetime = datetime.now()
+            hour   = str(cur_datetime.hour)
+            minute = str(cur_datetime.minute)
+            datetime_str = date + '|' + hour +'|'+ minute
+
             epoch_str      = str(cfg.highlyaccurate.epochs)
             batch_size_str = str(cfg.loader.batch_size)
             lr_str         = str(cfg.highlyaccurate.lr)
-            model_path_name = os.path.join(save_path, 'model_' + date + '_epoch'+ epoch_str + \
+            model_path_name = os.path.join(save_path, 'model_' + datetime_str + '_epoch'+ epoch_str + \
                                            '_batch'+ batch_size_str +'_lr'+lr_str + '_Loop0.pth')
 
             if cfg.highlyaccurate.resume:
                 net.load_state_dict(torch.load(model_path_name))
+                print("resume from" + model_path_name)
                 # net.load_state_dict(torch.load(os.path.join(save_path, 'model_' + str(cfg.highlyaccurate.resume - 1) + '.pth')))
-                print("resume from " + 'model_' + str(cfg.highlyaccurate.resume - 1) + '.pth')
+                # print("resume from " + 'model_' + str(cfg.highlyaccurate.resume - 1) + '.pth')
 
             if cfg.highlyaccurate.visualize:
                 net.load_state_dict(torch.load(os.path.join(save_path, 'Model_best.pth')))

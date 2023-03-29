@@ -208,12 +208,9 @@ class NuScenesDataset(torch.utils.data.Dataset):
             self.satmap_transform = input_image_transform[0]
             self.grdimage_transform = input_image_transform[1]
 
-        self.meter_per_pixel = utils.get_meter_per_pixel(scale=1)
+        # self.meter_per_pixel = utils.get_meter_per_pixel(scale=1)
         self.shift_range_meters_lat = shift_range_lat  # in terms of meters
         self.shift_range_meters_lon = shift_range_lon  # in terms of meters
-        self.shift_range_pixels_lat = shift_range_lat / self.meter_per_pixel  # shift range is in terms of meters
-        self.shift_range_pixels_lon = shift_range_lon / self.meter_per_pixel  # shift range is in terms of meters
-        # self.shift_range_meters = shift_range  # in terms of meters
         self.rotation_range = rotation_range  # in terms of degree
 
         # For __getitem__() to load /samples/ and /satmap/
@@ -571,11 +568,18 @@ class NuScenesDataset(torch.utils.data.Dataset):
         intrinsics = torch.FloatTensor(sample['intrinsics'])
         extrinsics = torch.FloatTensor(sample['extrinsics'])
 
+        # Calculate meter_per_pixel
+        init_lat, init_lon = MAP_ORIGINS[sample['location']]
+        _, _, lat, lon =  getLatLongfromPose(init_lat, init_lon, sample['pose_for_satmap'], "MATLAB")
+        meter_per_pixel = utils.get_meter_per_pixel(lat, self.zoom_level)
+        # img_name = grd_image_names[0].split("/")[-1]
+        # print(f'{img_name} meter_per_pixel: {meter_per_pixel}')
+
         sat_map_filename= SATMAP_PATH + get_satmap_name(grd_image_names[1])
         if not os.path.exists(sat_map_filename):
             print(f'satmap {sat_map_filename} not exist! Either wrong filename or need to download from google map.')
             # print(f'sample["pose"] {sample["pose"]}')
-            download_satmap(sample['location'], sample['pose_for_satmap'], sat_map_filename, self.zoom_level)
+            download_satmap(init_lat, init_lon, lat, lon, sat_map_filename, self.zoom_level)
 
         with Image.open(sat_map_filename, 'r') as SatMap:
             sat_map = SatMap.convert('RGB')
@@ -585,8 +589,8 @@ class NuScenesDataset(torch.utils.data.Dataset):
         
         sat_rot = sat_map.rotate(-heading / np.pi * 180)
         sat_align_cam = sat_rot.transform(sat_rot.size, Image.AFFINE,
-                                          (1, 0, utils.CameraGPS_shift_left[0] / self.meter_per_pixel,
-                                           0, 1, utils.CameraGPS_shift_left[1] / self.meter_per_pixel),
+                                          (1, 0, utils.CameraGPS_shift_left[0] / meter_per_pixel,
+                                           0, 1, utils.CameraGPS_shift_left[1] / meter_per_pixel),
                                           resample=Image.BILINEAR)
         # the homography is defined on: from target pixel to source pixel
         # now east direction is the real vehicle heading direction
@@ -594,6 +598,9 @@ class NuScenesDataset(torch.utils.data.Dataset):
         # randomly generate shift
         gt_shift_x = np.random.uniform(-1, 1)  # --> right as positive, parallel to the heading direction
         gt_shift_y = np.random.uniform(-1, 1)  # --> up as positive, vertical to the heading direction
+
+        self.shift_range_pixels_lat = self.shift_range_meters_lat / meter_per_pixel  # shift range is in terms of meters
+        self.shift_range_pixels_lon = self.shift_range_meters_lon / meter_per_pixel  # shift range is in terms of meters
 
         sat_rand_shift = \
             sat_align_cam.transform(
@@ -618,7 +625,8 @@ class NuScenesDataset(torch.utils.data.Dataset):
         return sat_map, grd_imgs, intrinsics, extrinsics, \
                torch.tensor(-gt_shift_x, dtype=torch.float32).reshape(1), \
                torch.tensor(-gt_shift_y, dtype=torch.float32).reshape(1), \
-               torch.tensor(theta, dtype=torch.float32).reshape(1)
+               torch.tensor(theta, dtype=torch.float32).reshape(1), \
+               meter_per_pixel
 
 
 def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, shift_range_lat, shift_range_lon, rotation_range, root_dir, zoom_level):
@@ -692,10 +700,7 @@ def load_val_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_c
         return val_loader
 
 
-def download_satmap(location, pose, satmap_filename, zoom_level=18):
-
-    init_lat, init_lon = MAP_ORIGINS[location]
-    _, _, lat, long =  getLatLongfromPose(init_lat, init_lon, pose, "MATLAB")
+def download_satmap(init_lat, init_lon, lat, long, satmap_filename, zoom_level=18):
     # ------- Query satmap from Google Map -------- #
     gmd = GoogleMapDownloader(lat, long, zoom_level, GoogleMapsLayers.SATELLITE)
     img = gmd.generateImage()

@@ -27,7 +27,7 @@ class DecoderBlock(torch.nn.Module):
     def forward(self, x, skip):
         # print(f'    Before block: shape {x.shape}')
         x = self.conv(x)
-        
+
         if self.up is not None:
             # skip is the same input tensor from encoder!
             up = self.up(skip) 

@@ -334,8 +334,8 @@ def getLatLongfromPose(INIT_LAT, INIT_LONG, pose, type):
         y: 1125.94482421875    
     '''
     lat, long = meter2latlon(INIT_LAT, INIT_LONG, x,y, type)  
-    print(f'    x:  {x}          y:  {y}')
-    print(f'    lat: {lat: .10f} lon = {long: .10f}')
+    # print(f'    x:  {x}          y:  {y}')
+    # print(f'    lat: {lat: .10f} lon = {long: .10f}')
     return x, y, lat, long  
 
 
