@@ -1261,6 +1261,7 @@ class LM_S2GP(nn.Module):
             headings = []
             for level in range(len(sat_feat_list)):
                 
+                print(f'models_nuscenes: sample_name: {sample_name}')
                 # This is a PARAMETER: which sample are we visualizing within this batch of features?
                 timestamp_idx = 0
 

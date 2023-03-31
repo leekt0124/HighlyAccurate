@@ -76,9 +76,11 @@ def test1( net_test, args, save_path, best_rank_result, epoch, device):
 
         sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel = [item.to(device) for item in data[:-1]]
         sample_name = data[-1]
+        # print(f'sample_name: {sample_name}')
 
         if args.direction == 'S2GP':   
-            shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, intrinsics, extrinsics,  meter_per_pixel, sample_name, mode='test')     
+            shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, intrinsics, extrinsics, 0, 0, 0, meter_per_pixel, sample_name, mode='test')
+            # shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, intrinsics, extrinsics,  meter_per_pixel, mode='test')     
             # shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, mode='test')
         elif args.direction == 'G2SP':
             shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, intrinsics, meter_per_pixel, mode='test')
