@@ -608,7 +608,11 @@ class NuScenesDataset(torch.utils.data.Dataset):
         # the homography is defined on: from target pixel to source pixel
         # now east direction is the real vehicle heading direction
 
-        ADDING_GT_TRANSFORM = False
+        gt_shfit_x = np.random.uniform(-1, 1) * self.shift_range_meters_lat / meter_per_pixel  # shift range is in terms of meters
+        gt_shift_y = np.random.uniform(-1, 1) * self.shift_range_meters_lon / meter_per_pixel  # shift range is in terms of meters
+        gt_theta = np.random.uniform(-1, 1) * self.rotation_range
+
+        ADDING_GT_TRANSFORM = True # Set this to False if you want to check unshifted dataset
         gt_shift_x = 0
         gt_shift_y = 0
         gt_theta = 0
@@ -618,18 +622,15 @@ class NuScenesDataset(torch.utils.data.Dataset):
             gt_shift_y = np.random.uniform(-1, 1)  # --> up as positive, vertical to the heading direction
             gt_theta = np.random.uniform(-1, 1)  # --> counter-clockwise as positive
 
-        self.shift_range_pixels_lat = self.shift_range_meters_lat / meter_per_pixel  # shift range is in terms of meters
-        self.shift_range_pixels_lon = self.shift_range_meters_lon / meter_per_pixel  # shift range is in terms of meters
-
         sat_rand_shift = \
             sat_rot.transform(
                 sat_rot.size, Image.AFFINE,
-                (1, 0, gt_shift_x * self.shift_range_pixels_lon,
-                0, 1, -gt_shift_y * self.shift_range_pixels_lat),
+                (1, 0, gt_shift_x,
+                0, 1, gt_shift_y),
                 resample=Image.BILINEAR)
 
         sat_rand_shift_rand_rot = \
-            sat_rand_shift.rotate(gt_theta * self.rotation_range)
+            sat_rand_shift.rotate(gt_theta)
         
         sat_map =TF.center_crop(sat_rand_shift_rand_rot, utils.SatMap_process_sidelength)
 
@@ -645,7 +646,7 @@ class NuScenesDataset(torch.utils.data.Dataset):
 
         return sat_map, grd_imgs, intrinsics, extrinsics, \
                torch.tensor(-gt_shift_x, dtype=torch.float32).reshape(1), \
-               torch.tensor(-gt_shift_y, dtype=torch.float32).reshape(1), \
+               torch.tensor(gt_shift_y, dtype=torch.float32).reshape(1), \
                torch.tensor(gt_theta, dtype=torch.float32).reshape(1), \
                meter_per_pixel, \
                sample_name
