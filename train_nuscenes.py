@@ -73,31 +73,19 @@ def test1( net_test, args, save_path, best_rank_result, epoch, device):
 
         if i > 10:
             break
-     
-        # sat_map, left_camera_k, grd_left_imgs, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in data[:-1]]
-        sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading = [item.to(device) for item in data]
 
-        # TODO: remove file_name from the network forward function
-        file_name = "temp"
+        sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel = [item.to(device) for item in data[:-1]]
+        sample_name = data[-1]
 
         if args.direction == 'S2GP':   
-            shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, intrinsics, extrinsics,  mode='test')     
+            shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, intrinsics, extrinsics,  meter_per_pixel, sample_name, mode='test')     
             # shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, mode='test')
         elif args.direction == 'G2SP':
-            shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, intrinsics, mode='test')
+            shifts_lat, shifts_lon, theta = net_test(sat_map, grd_imgs, intrinsics, meter_per_pixel, mode='test')
 
         shifts = torch.stack([shifts_lat, shifts_lon], dim=-1)
         headings = theta.unsqueeze(dim=-1)
-        # shifts: [B, 2]
-        # headings: [B, 1]
-        # print(f'shifts_lat.shape {shifts_lat.shape}') # [4]
-        # print(f'shifts_lon.shape {shifts_lon.shape}') # [4]
-        # print(f'shifts.shape {shifts.shape}')         # [4,2]
-
         gt_shift = torch.cat([gt_shift_v, gt_shift_u], dim=-1)  # [B, 2]
-        # print(f'gt_shift_u.shape {gt_shift_u.shape}') # [1,1]
-        # print(f'gt_shift_v.shape {gt_shift_v.shape}') # [1,1]
-        # print(f'gt_shift.shape {gt_shift.shape}')     # [1, 2]
 
         if args.shift_range_lat==0 and args.shift_range_lon==0:
             loss = torch.mean(headings - gt_heading)
@@ -410,9 +398,10 @@ def train(net, lr, args, device, save_path, model_save_path):
 
             # print(f'device: {device}')
             # get the inputs
-            sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel = [item.to(device) for item in Data]
+            sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel = [item.to(device) for item in Data[:-1]]
             # gt_shift_u.shape: (1, 1) (batch_size, )
-            
+            sample_name = Data[-1]
+            print(f'sample_name: {sample_name}')
             # zero the parameter gradients
             optimizer.zero_grad()
      
@@ -421,13 +410,13 @@ def train(net, lr, args, device, save_path, model_save_path):
                 loss, loss_decrease, shift_lat_decrease, shift_lon_decrease, thetas_decrease, loss_last, \
                 shift_lat_last, shift_lon_last, theta_last, \
                 L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list = \
-                    net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel, mode='train',
+                    net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel, sample_name, mode='train',
                         loop=Loop, level_first=args.level_first)
             elif args.direction =='G2SP':
                 loss, loss_decrease, shift_lat_decrease, shift_lon_decrease, thetas_decrease, loss_last, \
                 shift_lat_last, shift_lon_last, theta_last, \
                 L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list = \
-                    net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel, mode='train',)
+                    net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel, sample_name, mode='train',)
 
             # print("loss = ", loss)
             # print("loss_drcrease = ", loss_decrease)
@@ -606,24 +595,31 @@ def main(cfg):
         localize(net, cfg.highlyaccurate, device, save_path, 0., epoch=0)
     else:
         if cfg.highlyaccurate.test:
-            net.load_state_dict(torch.load(os.path.join(save_path, 'Model_best.pth')))
+            # net.load_state_dict(torch.load(os.path.join(save_path, 'Model_best.pth')))
+            test_model_path =  "/home/goroyeh/Yujiao/leekt/HighlyAccurate/ModelsNuscenes/model_0329|0|27v1.0-trainval_epoch5_batch4_lr0.0001_Loop7029.pth"
+            net.load_state_dict(torch.load(test_model_path))
             # net.load_state_dict(torch.load(os.path.join(save_path, 'model_1.pth')))
-            test1(net, cfg, save_path, 0., epoch=0)
+            # test1(net, cfg, save_path, 0., epoch=0)
+            test1(net, cfg.highlyaccurate, save_path, 0, epoch=0, device=device)
             # test2(net, cfg, save_path, 0., epoch=0)
         
         else:
             date           = str(cfg.highlyaccurate.date)  # e.g. 0328
+            dataset_str        = str(cfg.data.version)
             cur_datetime = datetime.now()
+            # date   = str(cur_datetime.month)+str(cur_datetime.day)
             hour   = str(cur_datetime.hour)
             minute = str(cur_datetime.minute)
-            datetime_str = date + '|' + hour +'|'+ minute
+            datetime_str = date + '|' + hour +'|'+ minute + dataset_str
 
             epoch_str      = str(cfg.highlyaccurate.epochs)
             batch_size_str = str(cfg.loader.batch_size)
             lr_str         = str(cfg.highlyaccurate.lr)
+
             model_path_name = os.path.join(save_path, 'model_' + datetime_str + '_epoch'+ epoch_str + \
                                            '_batch'+ batch_size_str +'_lr'+lr_str + '_Loop0.pth')
 
+            print(f'model_path_name: {model_path_name}')
             if cfg.highlyaccurate.resume:
                 net.load_state_dict(torch.load(model_path_name))
                 print("resume from" + model_path_name)

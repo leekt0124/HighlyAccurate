@@ -591,12 +591,12 @@ class NuScenesDataset(torch.utils.data.Dataset):
         heading = sample['yaw']
         heading = torch.from_numpy(np.asarray(heading))
 
-        print("heading = ", heading)
-        print("sat_map deg = ", -heading / np.pi * 180)
+        # print("heading = ", heading)
+        # print("sat_map deg = ", -heading / np.pi * 180)
         
         # save_image(sat_map, 'sat_map_origin.png')
         sat_map.save(f'sat_map_origin_{idx}.png')
-        print(sat_map_filename, idx)
+        # print(sat_map_filename, idx)
         sat_rot = sat_map.rotate(-heading / np.pi * 180 + 90) # +90 is to make vehicle direction facing up
 
         # Currently no need since both sat and bev are centered
@@ -641,12 +641,15 @@ class NuScenesDataset(torch.utils.data.Dataset):
 
         # print("sat_map.shape = ", sat_map.shape) # (3, 512, 512)
         # print("grd_imgs.shape = ", grd_imgs.shape) # (6, 3, 224, 480)
+        sample_name = sample['scene'] + '-' + str(idx)
 
         return sat_map, grd_imgs, intrinsics, extrinsics, \
                torch.tensor(-gt_shift_x, dtype=torch.float32).reshape(1), \
                torch.tensor(-gt_shift_y, dtype=torch.float32).reshape(1), \
                torch.tensor(gt_theta, dtype=torch.float32).reshape(1), \
-               meter_per_pixel
+               meter_per_pixel, \
+               sample_name
+               
 
 
 def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, shift_range_lat, shift_range_lon, rotation_range, root_dir, zoom_level):

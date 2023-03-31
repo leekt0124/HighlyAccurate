@@ -49,8 +49,8 @@ class CrossViewTransformer(nn.Module):
         """       
 
         # print(f'cvt.py: y.shape  {y.shape}') # shape: (1, 64, 200, 200) is the bev feature!
-        # z = self.to_logits(y)
-        z = y
+        z = self.to_logits(y) # Try this, 
+        # z = y
 
         # print(f'z.shape: {z.shape}') # [1,64,64,64]
         # print(f'cvt.py: z.shape  {z.shape}') # z.shape: torch.Size([1, 64, 200, 200])

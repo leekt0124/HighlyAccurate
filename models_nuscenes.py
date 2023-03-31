@@ -1184,7 +1184,7 @@ class LM_S2GP(nn.Module):
         theta_new = theta - 0.01 * delta_final[:, 2:3]
         return shift_u_new, shift_v_new, theta_new, m, v
 
-    def forward(self, sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu=None, gt_shiftv=None, gt_heading=None, meter_per_pixel=None, mode='train',
+    def forward(self, sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu=None, gt_shiftv=None, gt_heading=None, meter_per_pixel=None, sample_name=None, mode='train',
                 file_name=None, gt_depth=None, loop=0, level_first=0):
         '''
         :param sat_map: [B, C, A, A] A--> sidelength
@@ -1196,14 +1196,14 @@ class LM_S2GP(nn.Module):
                 L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list
         '''
         if level_first:
-            return self.forward_level_first(sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu, gt_shiftv, gt_heading, meter_per_pixel, \
+            return self.forward_level_first(sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu, gt_shiftv, gt_heading, meter_per_pixel, sample_name, \
                 mode, file_name, gt_depth, loop)
         else:
-            return self.forward_iter_first(sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu, gt_shiftv, gt_heading, meter_per_pixel,  \
+            return self.forward_iter_first(sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu, gt_shiftv, gt_heading, meter_per_pixel, sample_name, \
                 mode, file_name, gt_depth, loop)
 
 
-    def forward_iter_first(self, sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu=None, gt_shiftv=None, gt_heading=None, meter_per_pixel=None, mode='train',
+    def forward_iter_first(self, sat_map, grd_imgs, intrinsics, extrinsics, gt_shiftu=None, gt_shiftv=None, gt_heading=None, meter_per_pixel=None, sample_name=None, mode='train',
                 file_name=None, gt_depth=None, loop=0):
         '''
         :param sat_map: [B, C, A, A] A--> sidelength
@@ -1260,11 +1260,14 @@ class LM_S2GP(nn.Module):
             shift_vs = []
             headings = []
             for level in range(len(sat_feat_list)):
+                
+                # This is a PARAMETER: which sample are we visualizing within this batch of features?
+                timestamp_idx = 0
 
                 sat_feat = sat_feat_list[level]
-                print(f'sat_feat.shape {sat_feat.shape}')
-                sat_feat_last_3_dim = sat_feat[0, -3:, :, :] # (3, 128, 128)
-                save_image(sat_feat_last_3_dim, f'sat_feat_iter_{iter}.png')
+                # print(f'sat_feat.shape {sat_feat.shape}')
+                sat_feat_last_3_dim = sat_feat[timestamp_idx, -3:, :, :] # (3, 128, 128)
+                save_image(sat_feat_last_3_dim, f'sat_feat_iter_{iter}_{sample_name[timestamp_idx]}.png')
 
                 test_tensor = torch.randint_like(sat_feat_last_3_dim, low=0, high=255)
                 save_image(test_tensor, "test_tensor.png")
@@ -1274,9 +1277,9 @@ class LM_S2GP(nn.Module):
 
                 sat_conf = sat_conf_list[level]
                 grd_feat = grd_feat_list[level]
-                print(f'grd_feat.shape = {grd_feat.shape}')
-                grd_feat_last_3_dim = grd_feat[0, -3:, :, :]
-                save_image(grd_feat_last_3_dim, f"grd_feat_iter_{iter}.png")
+                # print(f'grd_feat.shape = {grd_feat.shape}')
+                grd_feat_last_3_dim = grd_feat[timestamp_idx, -3:, :, :]
+                save_image(grd_feat_last_3_dim, f"grd_feat_iter_{iter}_{sample_name[timestamp_idx]}.png")
 
                 grd_conf = grd_conf_list[level]
                 grd_H, grd_W = grd_feat.shape[-2:]
@@ -1313,9 +1316,9 @@ class LM_S2GP(nn.Module):
                                                      only_inputs=True)[0]
                     dp_dheading = torch.autograd.grad(p, heading, retain_graph=True, create_graph=True,
                                                     only_inputs=True)[0]
-                    print(dp_dshiftu)
-                    print(dp_dshiftv)
-                    print(dp_dheading)
+                    # print(dp_dshiftu)
+                    # print(dp_dshiftv)
+                    # print(dp_dheading)
 
                     shift_u_new, shift_v_new, heading_new = self.SGD_update(shift_u, shift_v, heading,
                                                                            sat_feat_new,
@@ -1415,7 +1418,7 @@ class LM_S2GP(nn.Module):
         else:
             return shift_lats[:, -1, -1], shift_lons[:, -1, -1], thetas[:, -1, -1]
 
-    def forward_level_first(self, sat_map, grd_imgs, intrinsics_dict, extrinsics, gt_shiftu=None, gt_shiftv=None, gt_heading=None, meter_per_pixel=None, mode='train',
+    def forward_level_first(self, sat_map, grd_imgs, intrinsics_dict, extrinsics, gt_shiftu=None, gt_shiftv=None, gt_heading=None, meter_per_pixel=None, sample_name=None, mode='train',
                 file_name=None, gt_depth=None, loop=0):
         '''
         :param sat_map: [B, C, A, A] A--> sidelength
