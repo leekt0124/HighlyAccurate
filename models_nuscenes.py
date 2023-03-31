@@ -765,9 +765,12 @@ class LM_S2GP(nn.Module):
         Returns:
         '''
         B, _ = ori_heading.shape
-        heading = ori_heading * self.args.rotation_range / 180 * np.pi
-        shift_u = ori_shift_u * self.args.shift_range_lon
-        shift_v = ori_shift_v * self.args.shift_range_lat
+        # heading = ori_heading * self.args.rotation_range / 180 * np.pi
+        # shift_u = ori_shift_u * self.args.shift_range_lon
+        # shift_v = ori_shift_v * self.args.shift_range_lat
+        heading = ori_heading / 180 * np.pi
+        shift_u = ori_shift_u
+        shift_v = ori_shift_v
 
         cos = torch.cos(heading)
         sin = torch.sin(heading)
