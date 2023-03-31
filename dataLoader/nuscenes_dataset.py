@@ -608,19 +608,16 @@ class NuScenesDataset(torch.utils.data.Dataset):
         # the homography is defined on: from target pixel to source pixel
         # now east direction is the real vehicle heading direction
 
-        gt_shfit_x = np.random.uniform(-1, 1) * self.shift_range_meters_lat / meter_per_pixel  # shift range is in terms of meters
+        gt_shift_x = np.random.uniform(-1, 1) * self.shift_range_meters_lat / meter_per_pixel  # shift range is in terms of meters
         gt_shift_y = np.random.uniform(-1, 1) * self.shift_range_meters_lon / meter_per_pixel  # shift range is in terms of meters
         gt_theta = np.random.uniform(-1, 1) * self.rotation_range
 
         ADDING_GT_TRANSFORM = True # Set this to False if you want to check unshifted dataset
-        gt_shift_x = 0
-        gt_shift_y = 0
-        gt_theta = 0
-        if ADDING_GT_TRANSFORM:
+        if not ADDING_GT_TRANSFORM:
             # randomly generate shift
-            gt_shift_x = np.random.uniform(-1, 1)  # --> right as positive, parallel to the heading direction
-            gt_shift_y = np.random.uniform(-1, 1)  # --> up as positive, vertical to the heading direction
-            gt_theta = np.random.uniform(-1, 1)  # --> counter-clockwise as positive
+            gt_shift_x *= 0  # --> right as positive, parallel to the heading direction
+            gt_shift_y *= 0  # --> up as positive, vertical to the heading direction
+            gt_theta *= 0  # --> counter-clockwise as positive
 
         sat_rand_shift = \
             sat_rot.transform(
