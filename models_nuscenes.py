@@ -668,7 +668,12 @@ class LM_S2GP(nn.Module):
             self.damping = nn.Parameter(
             torch.zeros(size=(), dtype=torch.float32, requires_grad=True))
 
-        ori_grdH, ori_grdW = 256, 1024
+        # TODO : take ori_grdH/W from hydra config!
+        # ori_grdH, ori_grdW = 256, 1024
+        ori_grdH = args.data.image.h
+        ori_grdW = args.data.image.w
+        print(f'ori_grdH: {ori_grdH}')
+        print(f'ori_grdW: {ori_grdW}')        
         xyz_grds = []
         for level in range(4):
             grd_H, grd_W = ori_grdH/(2**(3-level)), ori_grdW/(2**(3-level))
@@ -814,7 +819,7 @@ class LM_S2GP(nn.Module):
 
         meter_per_pixel = utils.get_meter_per_pixel() # Pass MAP_ORIGINS latitude
         meter_per_pixel *= utils.get_process_satmap_sidelength() / satmap_sidelength
-        sat_uv = zx/meter_per_pixel + satmap_sidelength / 2  # [B, grd_H, grd_W, 2] sat map uv
+        sat_uv = zx/meter_per_pixel + satmap_sidelength / 2  # [B, grd_H, grd_W, 2] sat map uv Fixed across all input grd_images
 
         if require_jac:
             dR_dtheta = self.args.rotation_range / 180 * np.pi * \
@@ -869,109 +874,14 @@ class LM_S2GP(nn.Module):
 
         '''
         B, C, satmap_sidelength, _ = sat_f.size()
-        A = satmap_sidelength
-
         uv, mask, jac_shiftu, jac_shiftv, jac_heading = self.grd2cam2world2sat(shift_u, shift_v, heading, level,
                                     satmap_sidelength, require_jac, gt_depth)
         # [B, H, W, 2], [B, H, W], [B, H, W, 2], [B, H, W, 2], [B,H, W, 2]
-        # # --------------------------------------------------------------------------------------------------
-        # def grd2cam2world2sat(ori_shift, ori_heading, ori_camera_k):
-        #     '''
-        #     realword: X: south, Y:down, Z: east
-        #     camera: u:south, v: down from center (when heading east, need to rotate heading angle)
-        #     Args:
-        #         shift: [B, N, 2]
-        #         heading: [B, N, 1]
-        #         XYZ_1: [H,W,4]
-        #         ori_camera_k: [B,3,3]
-        #         grd_H:
-        #         grd_W:
-        #         ori_grdH:
-        #         ori_grdW:
-        #
-        #     Returns:
-        #     '''
-        #     B, N, _ = ori_heading.shape
-        #     heading = ori_heading * self.args.rotation_range / 180 * np.pi
-        #     shift = ori_shift * self.args.shift_range
-        #
-        #     cos = torch.cos(heading)
-        #     sin = torch.sin(heading)
-        #     zeros = torch.zeros_like(cos)
-        #     ones = torch.ones_like(cos)
-        #     R = torch.cat([cos, zeros, -sin, zeros, ones, zeros, sin, zeros, cos], dim=-1)  # shape = [B, N, 9]
-        #     R = R.view(B, N, 3, 3)  # shape = [B, N, 3, 3]
-        #     # this R is the inverse of the R in G2SP
-        #
-        #     camera_height = utils.get_camera_height()
-        #     # camera offset, shift[0]:east,Z, shift[1]:north,X
-        #     height = camera_height * torch.ones_like(shift[:, :, :1])
-        #     T0 = torch.cat([shift[:, :, 1:], height, -shift[:, :, :1]], dim=-1)  # shape = [B, N, 3]
-        #     # T0 = torch.unsqueeze(T0, dim=-1)  # shape = [B, N, 3, 1]
-        #     # T = torch.einsum('bnij, bnj -> bni', -R, T0) # [B, N, 3]
-        #     T = torch.sum(-R * T0[:, :, None, :], dim=-1)  # [B, N, 3]
-        #
-        #     # The above R, T define transformation from camera to world
-        #
-        #     camera_k = ori_camera_k.clone()
-        #     camera_k[:, :1, :] = ori_camera_k[:, :1,
-        #                          :] * grd_W / ori_grdW  # original size input into feature get network/ output of feature get network
-        #     camera_k[:, 1:2, :] = ori_camera_k[:, 1:2, :] * grd_H / ori_grdH
-        #     camera_k_inv = torch.inverse(camera_k)  # [B, 3, 3]
-        #
-        #     v, u = torch.meshgrid(torch.arange(0, grd_H, dtype=torch.float32, device=ori_shift.device),
-        #                           torch.arange(0, grd_W, dtype=torch.float32, device=ori_shift.device))
-        #     uv1 = torch.stack([u, v, torch.ones_like(u)], dim=-1).unsqueeze(dim=0).repeat(B * N, 1, 1,
-        #                                                                                   1)  # [BN, grd_H, grd_W, 3]
-        #     xyz_w = torch.sum(camera_k_inv[:, None, None, :, :] * uv1[:, :, :, None, :],
-        #                       dim=-1)  # [BN, grd_H, grd_W, 3]
-        #     w = camera_height / torch.where(torch.abs(xyz_w[..., 1:2]) > utils.EPS, xyz_w[..., 1:2],
-        #                                     utils.EPS * torch.ones_like(xyz_w[..., 1:2]))  # [BN, grd_H, grd_W, 1]
-        #     xyz_grd = xyz_w * w  # [BN, grd_H, grd_W, 3] under the grd camera coordinates
-        #     xyz_grd = xyz_grd.reshape(B, N, grd_H, grd_W, 3)
-        #
-        #     xyz = torch.sum(R[:, :, None, None, :, :] * xyz_grd[:, :, :, :, None, :], dim=-1) + T[:, :, None, None, :]
-        #     # [B, N, grd_H, grd_W, 3]
-        #     # zx0 = torch.stack([xyz[..., 2], xyz[..., 0]], dim=-1)  # [B, N, grd_H, grd_W, 2]
-        #     R_sat = torch.tensor([0, 0, 1, 1, 0, 0], dtype=torch.float32, device=ori_shift.device, requires_grad=True) \
-        #         .reshape(2, 3)
-        #     zx = torch.sum(R_sat[None, None, None, None, :, :] * xyz[:, :, :, :, None, :], dim=-1)
-        #     # [B, N, grd_H, grd_W, 2]
-        #     # assert zx == zx0
-        #
-        #     meter_per_pixel = utils.get_meter_per_pixel()
-        #     meter_per_pixel *= utils.get_process_satmap_sidelength() / satmap_sidelength
-        #     sat_uv = zx / meter_per_pixel + satmap_sidelength / 2  # [B, N, grd_H, grd_W, 2] sat map uv
-        #
-        #     return sat_uv
-        #
-        # auto_jac = torch.autograd.functional.jacobian(grd2cam2world2sat, (shift, heading, camera_k))
-        # # auto_jac_shift = torch.where(mask.unsqueeze(dim=0), auto_jac[0][:, :, :, :, 0, :].permute(4, 0, 1, 2, 3),
-        # #                              torch.zeros_like(jac_shift))
-        # auto_jac_shift = auto_jac[0][:, :, :, :, :, 0, 0, :].permute(5, 0, 1, 2, 3, 4) # [2, B(1), N(1), H, W, 2]
-        # diff = torch.abs(auto_jac_shift - jac_shift)
-        # # auto_jac_heading = torch.where(mask.unsqueeze(dim=0), auto_jac[1][:, :, :, :, 0, :].permute(4, 0, 1, 2, 3),
-        # #                                torch.zeros_like(jac_heading))
-        # auto_jac_heading = auto_jac[1][:, :, :, :, :, 0, 0, :].permute(5, 0, 1, 2, 3, 4)
-        # diff1 = torch.abs(auto_jac_heading - jac_heading)
-        # heading_np = jac_heading[0, 0, 0].data.cpu().numpy()
-        # auto_heading_np = auto_jac_heading[0, 0, 0].data.cpu().numpy()
-        # diff1_np = diff1.data.cpu().numpy()
-        # diff_np = diff.data.cpu().numpy()
-        # mask_np = mask[0, ..., 0].float().data.cpu().numpy()
-        # # --------------------------------------------------------------------------------------------------
-
         B, grd_H, grd_W, _ = uv.shape
         if require_jac:
             jac = torch.stack([jac_shiftu, jac_shiftv, jac_heading], dim=0)  # [3, B, H, W, 2]
-
-            # jac = jac.reshape(3, -1, grd_H, grd_W, 2)
         else:
             jac = None
-
-        # print('==================')
-        # print(jac.shape)
-        # print('==================')
 
         sat_f_trans, new_jac = grid_sample(sat_f,
                                            uv,
@@ -986,6 +896,7 @@ class LM_S2GP(nn.Module):
         else:
             sat_c_trans = None
 
+                     # sat_c is None by default
         return sat_f_trans, sat_c_trans, new_jac, uv * mask[:, :, :, None], mask
 
     def LM_update(self, shift_u, shift_v, theta, sat_feat_proj, sat_conf_proj, grd_feat, grd_conf, dfeat_dpose):
