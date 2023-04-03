@@ -725,19 +725,21 @@ class LM_S2GP(nn.Module):
         shift_u = ori_shift_u * self.args.shift_range_lon
         shift_v = ori_shift_v * self.args.shift_range_lat
 
-        print("shift_u.shape = ", shift_u.shape)
+        # print("shift_u.shape = ", shift_u.shape)
 
-        cos = torch.cos(heading)
+        cos = torch.cos(heading) # (B, 1)
         sin = torch.sin(heading)
         zeros = torch.zeros_like(cos)
         ones = torch.ones_like(cos)
         R = torch.cat([cos, zeros, -sin, zeros, ones, zeros, sin, zeros, cos], dim=-1)  # shape = [B, 9]
-        R = R.view(B, 3, 3)  # shape = [B, N, 3, 3]
+        R = R.view(B, 3, 3)  # shape = (B, 3, 3)
+
         # this R is the inverse of the R in G2SP
 
         camera_height = utils.get_camera_height()
         # camera offset, shift[0]:east,Z, shift[1]:north,X
         height = camera_height * torch.ones_like(shift_u[:, :1])
+        print("height.shape = ", height.shape)
         T0 = torch.cat([shift_v, height, -shift_u], dim=-1)  # shape = [B, 3]
         # T0 = torch.unsqueeze(T0, dim=-1)  # shape = [B, N, 3, 1]
         # T = torch.einsum('bnij, bnj -> bni', -R, T0) # [B, N, 3]
@@ -825,6 +827,8 @@ class LM_S2GP(nn.Module):
         '''
         B, C, satmap_sidelength, _ = sat_f.size()
         A = satmap_sidelength
+
+        # print("sat_f.shape = ", sat_f.shape)
 
         # print("shift_u = ", shift_u)
         # print("shift_v = ", shift_v)
@@ -921,6 +925,7 @@ class LM_S2GP(nn.Module):
 
         B, grd_H, grd_W, _ = uv.shape
         if require_jac:
+            # leekt: This is duv_duvt
             jac = torch.stack([jac_shiftu, jac_shiftv, jac_heading], dim=0)  # [3, B, H, W, 2]
 
             # jac = jac.reshape(3, -1, grd_H, grd_W, 2)
@@ -931,6 +936,7 @@ class LM_S2GP(nn.Module):
         # print(jac.shape)
         # print('==================')
 
+        # leekt: grid_smaple will do dF_duv * duv_duvt
         sat_f_trans, new_jac = grid_sample(sat_f,
                                            uv,
                                            jac)
@@ -944,6 +950,8 @@ class LM_S2GP(nn.Module):
         else:
             sat_c_trans = None
 
+        # print("sat_f_trans.shape = ", sat_f_trans.shape)
+        # print("sat_c_trans.shape = ", sat_c_trans.shape)
         return sat_f_trans, sat_c_trans, new_jac, uv * mask[:, :, :, None], mask
 
     def LM_update(self, shift_u, shift_v, theta, sat_feat_proj, sat_conf_proj, grd_feat, grd_conf, dfeat_dpose):
@@ -1197,10 +1205,10 @@ class LM_S2GP(nn.Module):
             for level in range(len(sat_feat_list)):
                 sat_feat = sat_feat_list[level]
                 sat_conf = sat_conf_list[level]
-                print("sat_conf.shape = ", sat_conf.shape)
+                # print("sat_conf.shape = ", sat_conf.shape)
                 grd_feat = grd_feat_list[level]
                 grd_conf = grd_conf_list[level]
-                print("grd_conf.shape = ", grd_conf.shape)
+                # print("grd_conf.shape = ", grd_conf.shape)
 
                 # # Visualize weights
                 # # sat_feat
@@ -1234,7 +1242,11 @@ class LM_S2GP(nn.Module):
                 grd_H, grd_W = grd_feat.shape[-2:]
                 sat_feat_proj, sat_conf_proj, dfeat_dpose, sat_uv, mask = self.project_map_to_grd(
                     sat_feat, sat_conf, shift_u, shift_v, heading, level, gt_depth=gt_depth)
-                # [B, C, H, W], [B, 1, H, W], [3, B, C, H, W], [B, H, W, 2]
+                # [B, C, H, W], [B, 1, H, W], [3, B, C, H, W], [B, H, W, 2], [B, H, W]
+
+                # print("dfeat_dpose.shape = ", dfeat_dpose.shape)
+                # print("sat_uv.shape = ", sat_uv.shape)
+                # print("mask.shape = ", mask.shape)
 
                 # # sat_feat_proj
                 # # print("grd_feat.shape = ", grd_feat.shape) # (1, 256, 64, 64) 
@@ -1254,6 +1266,7 @@ class LM_S2GP(nn.Module):
                 grd_conf = grd_conf * mask[:, None, :, :]
 
                 if self.args.proj == 'geo':
+                    # leekt (Maybe just use the bottom half?)
                     sat_feat_new = sat_feat_proj[:, :, grd_H // 2:, :]
                     sat_conf_new = sat_conf_proj[:, :, grd_H // 2:, :]
                     grd_feat_new = grd_feat[:, :, grd_H // 2:, :]
