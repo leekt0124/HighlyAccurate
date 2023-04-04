@@ -195,6 +195,7 @@ def grid_sample(image, optical, jac=None):
         dout_dpxy = torch.stack([dout_dpx, dout_dpy], dim=-1)  # [N, C, H, W, 2]
 
         # assert jac.shape[1:] == [N, H, W, 2]
+        # jac: (3, N, H, W 2)
         jac_new = dout_dpxy[None, :, :, :, :, :] * jac[:, :, None, :, :, :]
         jac_new1 = torch.sum(jac_new, dim=-1)
 

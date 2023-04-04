@@ -1244,16 +1244,26 @@ class LM_S2GP(nn.Module):
                 grd_feat_new = grd_feat
                 grd_conf_new = grd_conf
 
-                # Key element for LM update!
+                # ------------- Partial Derivative of Features w.r.t. Pose(shift_u, shift_v, theta) for LM Optimization ------------- #
                 dfeat_dpose_new = torch.ones([3, B, C, self.data_dict.bev.h, self.data_dict.bev.h], device=shift_u.device) #dfeat_dpose               
-
                 # dfeat_dpose_new = torch.ones([3, B, C, H, W], device=shift_u.device) #dfeat_dpose    
 
-                sat_feat_shiftu = F.pad(sat_feat[:, :, :, 1:], (1), "constant", 0)
-                dfeat_dpose_new[0] = sat_feat_shiftu - sat_feat 
-                sat_feat_shiftv = F.pad(sat_feat[:, :, 1:, :], (1), "constant", 0)
-                dfeat_dpose_new[1] = sat_feat_shiftv - sat_feat                 
+                sat_feat_shiftu = F.pad(sat_feat[:, :, :, 1:], (0,1), "constant", 0)
+                dfeat_dpose_new[0,...] = sat_feat_shiftu - sat_feat 
+                sat_feat_shiftv = F.pad(sat_feat[:, :, 1:, :], (0,0,0,1), "constant", 0)
+                dfeat_dpose_new[1,...] = sat_feat_shiftv - sat_feat                 
                 
+
+                
+                '''
+                    dR_dtheta       (B, 3, 3)
+                    xyz_bev:        (1, bev_h, bev_w, 3)
+                    Tbev2sat:       (B, 3)
+                    R_bev2sat:      (2, 3)
+                    dxyz_dtheta:    (B, bev_h, bev_w, 3)
+                    meter_per_pixel:(B)
+                    duv_dtheta:     (B, C, bev_h, bev_w)
+                '''                   
                 cos = torch.cos(heading)        # (B,) where B = 4(batch size)
                 sin = torch.sin(heading)        # (B,)
                 zeros = torch.zeros_like(cos)   # (B,)
@@ -1263,8 +1273,8 @@ class LM_S2GP(nn.Module):
 
                 # Need: xyz_bev, Tbev2sat, R_bev2sat(bev2sat)
                 _, _, bev_H, bev_W = grd_feat.shape
-                v, u = torch.meshgrid(torch.arange(0, bev_H, dtype=torch.float32),
-                                    torch.arange(0, bev_W, dtype=torch.float32))
+                v, u = torch.meshgrid(torch.arange(0, bev_H, dtype=torch.float32, device=dR_dtheta.device),
+                                      torch.arange(0, bev_W, dtype=torch.float32, device=dR_dtheta.device))
                 xyz_bev = torch.stack([u, v, torch.ones_like(u)], dim=-1).unsqueeze(dim=0)  # [1, grd_H, grd_W, 3]                
                 camera_height = utils.get_camera_height()
                 # camera offset, shift[0]:east,Z, shift[1]:north,X
@@ -1274,10 +1284,15 @@ class LM_S2GP(nn.Module):
                             dtype=torch.float32, device=dR_dtheta.device, requires_grad=True).reshape(2, 3)
 
                 dxyz_dtheta = torch.sum(dR_dtheta[:, None, None, :, :] * xyz_bev[:, :, :, None, :], dim=-1) + \
-                            torch.sum(-dR_dtheta * Tbev2sat[:, None, :], dim=-1)[:, None, None, :]
-                duv_dtheta = 1 / meter_per_pixel * \
-                        torch.sum(R_bev2sat[None, None, None, :, :] * dxyz_dtheta[:, :, :, None, :], dim=-1)
-                dfeat_dpose_new[2] = duv_dtheta        
+                              torch.sum(-dR_dtheta * Tbev2sat[:, None, :], dim=-1)[:, None, None, :]
+             
+                # Note: meter_per_pixel is shape (B) here we take only the first one!
+                # denom: (B, bev_h, bev_w, 2) (4, 128, 128, 2)
+                duv_dtheta = 1 / meter_per_pixel[0] * \
+                        torch.sum(R_bev2sat[None, None, None, :, :] * dxyz_dtheta[:, :, :, None, :], dim=-1)  
+                # (B, bev_h, bev_w, 2)  => (B, 1, bev_h, bev_w, 2) => (B, C, bev_h, bev_W)
+                duv_dtheta = torch.sum(duv_dtheta[:, None, :, :, :].expand(-1, C, -1, -1, -1), dim=-1)
+                dfeat_dpose_new[2,...] = duv_dtheta        
 
 
                 if self.args.Optimizer == 'LM':
