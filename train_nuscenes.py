@@ -58,10 +58,11 @@ def localize(net_localize, args,  device, save_path, best_rank_result, epoch):
             shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_left_imgs, left_camera_k, mode='test')
 
 
-def test1( net_test, args, save_path, best_rank_result, epoch, device):
+def test1( net_test, cfg, save_path, best_rank_result, epoch, device):
+    args = cfg.highlyaccurate
     ### net evaluation state
     net_test.eval()
-    dataloader = load_val_data(args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir, args.loader, \
+    dataloader = load_val_data(cfg.data, args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir, args.loader, \
                                args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir, args.zoom_level)
     pred_shifts = []
     pred_headings = []
@@ -351,9 +352,11 @@ def test2(net_test, args, save_path, best_rank_result, epoch,  device):
 
 
 ###### learning criterion assignment #######
-def train(net, lr, args, device, save_path, model_save_path):
+def train(net, lr, cfg, device, save_path, model_save_path):
     bestRankResult = 0.0  # current best, Siam-FCANET18
     # loop over the dataset multiple times
+
+    args = cfg.highlyaccurate
     print(f'resume: {args.resume}')
     print(f'epochs: {args.epochs}')
     for epoch in range(args.resume, args.epochs):
@@ -372,7 +375,7 @@ def train(net, lr, args, device, save_path, model_save_path):
         optimizer.zero_grad()
 
         ### feeding A and P into train loader     
-        trainloader = load_train_data(args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir,  args.loader, \
+        trainloader = load_train_data(cfg.data, args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir,  args.loader, \
                                       args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir, args.zoom_level)
 
         loss_vec = []
@@ -634,7 +637,7 @@ def main(cfg):
 
             lr = cfg.highlyaccurate.lr
 
-            train(net, lr, cfg.highlyaccurate, device, save_path, model_path_name)
+            train(net, lr, cfg, device, save_path, model_path_name)
 
 
 if __name__ == '__main__':
