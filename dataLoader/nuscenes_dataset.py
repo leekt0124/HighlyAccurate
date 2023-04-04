@@ -24,6 +24,8 @@ from torchvision import transforms
 
 from torchvision.utils import save_image
 
+import math
+
 
 
 import sys
@@ -45,6 +47,7 @@ NUM_CLASSES = len(CLASSES)
 
 
 def get_data(
+    data_config,
     version,  # 'v1.0-trainval' or -mini
     dataset_dir,
     labels_dir,
@@ -72,21 +75,23 @@ def get_data(
     split_scenes = get_split(split, 'nuscenes')
 
     result = list()
+    data_config = dict(data_config)
     for scene_name, scene_record in helper.get_scenes():
         if scene_name not in split_scenes:
             continue
 
-        data = NuScenesDataset(scene_name, scene_record, zoom_level, helper, input_image_transform,
+        data = NuScenesDataset(data_config, scene_name, scene_record, zoom_level, helper, input_image_transform,
                                transform, shift_range_lat, shift_range_lon, rotation_range, root_dir, **dataset_kwargs)
         result.append(data)
 
     return result
 
 
-def get_split_data(version, dataset_dir, labels_dir, transform, shift_range_lat, shift_range_lon, rotation_range, \
+def get_split_data(data_config, version, dataset_dir, labels_dir, transform, shift_range_lat, shift_range_lon, rotation_range, \
                    root_dir, zoom_level, loader_config, split, loader=True, shuffle=False):
     # get a list of NuScenesDataset
     datasets = get_data(
+        data_config,
         version, # v1.0-trainval or v1.0-mini
         dataset_dir,
         labels_dir,
@@ -183,6 +188,7 @@ class NuScenesDataset(torch.utils.data.Dataset):
 
     def __init__(
         self,
+        data_config: dict,
         scene_name: str,
         scene_record: dict,
         zoom_level: int,
@@ -219,6 +225,9 @@ class NuScenesDataset(torch.utils.data.Dataset):
 
         # For __getitem__() to load /samples/ and /satmap/
         self.root_dir = root_dir
+
+        # Access data config in config/data/nuscenes.yaml
+        self.data_config = data_config
 
     def parse_scene(self, scene_record, camera_rigs):
         data = []
@@ -506,6 +515,10 @@ class NuScenesDataset(torch.utils.data.Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
+
+        print(f'bev_h: {self.data_config["bev"]["h"]}')
+        print(f'bev_h_meters: {self.data_config["bev"]["h_meters"]}')
+
         sample = self.samples[idx]
 
         # Raw annotations
@@ -575,9 +588,10 @@ class NuScenesDataset(torch.utils.data.Dataset):
         # Calculate meter_per_pixel
         init_lat, init_lon = MAP_ORIGINS[sample['location']]
         _, _, lat, lon =  getLatLongfromPose(init_lat, init_lon, sample['pose_for_satmap'], "MATLAB")
+        print(f"lat = {lat}, lon = {lon}")
         meter_per_pixel = utils.get_meter_per_pixel(lat, self.zoom_level)
         # img_name = grd_image_names[0].split("/")[-1]
-        # print(f'{img_name} meter_per_pixel: {meter_per_pixel}')
+        print(f'meter_per_pixel: {meter_per_pixel}')
 
         sat_map_filename= SATMAP_PATH + get_satmap_name(grd_image_names[1])
         if not os.path.exists(sat_map_filename):
@@ -629,7 +643,24 @@ class NuScenesDataset(torch.utils.data.Dataset):
         sat_rand_shift_rand_rot = \
             sat_rand_shift.rotate(gt_theta)
         
-        sat_map =TF.center_crop(sat_rand_shift_rand_rot, utils.SatMap_process_sidelength)
+        # # Get nuscenes meter per pixel
+        # nuscenes_meter_per_pixel = self.data_config["bev"]["h_meters"] / self.data_config["bev"]["h"]
+        # print("nuscenes_meter_per_pixel = ", nuscenes_meter_per_pixel)
+
+        # # Here we will resize satmap to make it has the same meter per pixel, so that the comparison between
+        # # satmap and BEV feature would be meaningful
+        # resize_ratio = meter_per_pixel / nuscenes_meter_per_pixel
+        # print("resize_ratio = ", resize_ratio.item())
+        # sat_H, sat_W = sat_rand_shift_rand_rot.size
+
+        # # Note that approximation is applied here
+        # new_sat_H, new_sat_W = math.floor(sat_H * resize_ratio), math.floor(sat_W * resize_ratio)
+        # print("new_sat_H = ", new_sat_H, ", new_sat_W = ", new_sat_W)
+        # sat_rand_shift_rand_rot = sat_rand_shift_rand_rot.resize((new_sat_H, new_sat_W), resample=Image.Resampling.BILINEAR)
+
+        
+        # sat_map =TF.center_crop(sat_rand_shift_rand_rot, utils.SatMap_process_sidelength)
+        sat_map = sat_rand_shift_rand_rot
 
         # transform (resize here)
         if self.satmap_transform is not None:
@@ -650,12 +681,12 @@ class NuScenesDataset(torch.utils.data.Dataset):
                
 
 
-def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, shift_range_lat, shift_range_lon, rotation_range, root_dir, zoom_level):
+def load_train_data(data_config, GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, shift_range_lat, shift_range_lon, rotation_range, root_dir, zoom_level):
     
     SatMap_process_sidelength = utils.get_process_satmap_sidelength()
 
     satmap_transform = transforms.Compose([
-        transforms.Resize(size=[SatMap_process_sidelength, SatMap_process_sidelength]),
+        # transforms.Resize(size=[SatMap_process_sidelength, SatMap_process_sidelength]),
         transforms.ToTensor(),
     ])
 
@@ -672,6 +703,7 @@ def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader
     
     
     train_loader = get_split_data(
+                             data_config,
                              version,
                              dataset_dir, #="/home/goroyeh/nuScene_dataset/media/datasets/nuscenes",
                              labels_dir, #="/home/goroyeh/nuScene_dataset/media/datasets/cvt_labels_nuscenes", 
@@ -689,7 +721,7 @@ def load_train_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader
     return train_loader
 
 
-def load_val_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, shift_range_lat, shift_range_lon, rotation_range, root_dir, zoom_level):
+def load_val_data(data_config, GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_config, shift_range_lat, shift_range_lon, rotation_range, root_dir, zoom_level):
         
         SatMap_process_sidelength = utils.get_process_satmap_sidelength()
 
@@ -707,6 +739,7 @@ def load_val_data(GrdImg_H, GrdImg_W, version, dataset_dir, labels_dir, loader_c
         ])
             
         val_loader = get_split_data(
+                             data_config,
                              version,
                              dataset_dir,
                              labels_dir, 

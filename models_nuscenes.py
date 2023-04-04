@@ -16,6 +16,8 @@ from jacobian import grid_sample
 from models_ford import loss_func
 from RNNs import NNrefine
 
+import math
+
 EPS = utils.EPS
 
 
@@ -651,6 +653,8 @@ class LM_S2GP(nn.Module):
         self.using_weight = args.highlyaccurate.using_weight
         self.loss_method = args.highlyaccurate.loss_method
 
+        self.data_dict = args.data
+
         self.SatFeatureNet = VGGUnet(self.level)
         self.GrdFeatureNet = VGGUnet(self.level)
 
@@ -1180,6 +1184,34 @@ class LM_S2GP(nn.Module):
                 timestamp_idx = 0
 
                 sat_feat = sat_feat_list[level]
+                B_sat, C_sat, H_sat, W_sat = sat_feat.shape
+
+                meter_per_pixel_feature = meter_per_pixel[0].item() * 4
+                print("meter_per_pixel_feature = ", meter_per_pixel_feature)
+
+                # Extract BEV meter_per_pixel
+                # self.data_dict.bev.h # 128
+                # self.data_dict.bev.h_meters # 100
+                meter_per_pixel_BEV = self.data_dict.bev.h_meters / self.data_dict.bev.h
+                print("meter_per_pixel_BEV = ", meter_per_pixel_BEV)
+
+
+                H_sat_resize, W_sat_resize = math.floor(H_sat * meter_per_pixel_feature / meter_per_pixel_BEV), math.floor(W_sat * meter_per_pixel_feature / meter_per_pixel_BEV)
+                
+
+
+                sat_feat_transform = transforms.Resize(size=(H_sat_resize, W_sat_resize))
+                
+                sat_feat_resized = sat_feat_transform(sat_feat) 
+                sat_feat_crop = TF.center_crop(sat_feat_resized, self.data_dict.bev.h)
+
+                sat_feat = sat_feat_crop
+
+                
+
+                print("sat_feat.shape = ", sat_feat.shape)
+                print("----------------------------------------")
+
                 # print(f'sat_feat.shape {sat_feat.shape}')
                 sat_feat_last_3_dim = sat_feat[timestamp_idx, -3:, :, :] # (3, 128, 128)
                 save_image(sat_feat_last_3_dim, f'sat_feat_iter_{iter}_{sample_name[timestamp_idx]}.png')
@@ -1192,7 +1224,8 @@ class LM_S2GP(nn.Module):
 
                 sat_conf = sat_conf_list[level]
                 grd_feat = grd_feat_list[level]
-                # print(f'grd_feat.shape = {grd_feat.shape}')
+                print(f'grd_feat.shape = {grd_feat.shape}')
+                print("----------------------------------")
                 grd_feat_last_3_dim = grd_feat[timestamp_idx, -3:, :, :]
                 save_image(grd_feat_last_3_dim, f"grd_feat_iter_{iter}_{sample_name[timestamp_idx]}.png")
 
@@ -1212,7 +1245,7 @@ class LM_S2GP(nn.Module):
                 grd_conf_new = grd_conf
 
                 # Key element for LM update!
-                dfeat_dpose_new = torch.ones([3, B, C, H, W], device=shift_u.device) #dfeat_dpose               
+                dfeat_dpose_new = torch.ones([3, B, C, self.data_dict.bev.h, self.data_dict.bev.h], device=shift_u.device) #dfeat_dpose               
 
                 if self.args.Optimizer == 'LM':
                     # Check devices                 
@@ -1277,13 +1310,14 @@ class LM_S2GP(nn.Module):
                     pred_feat_dict[level].append(sat_feat_proj)
                     pred_uv_dict[level].append(sat_uv / torch.tensor([sat_feat.shape[-1], sat_feat.shape[-2]], dtype=torch.float32).reshape(1, 1, 1, 2).to(sat_feat.device))
 
-                if level not in gt_uv_dict.keys() and mode == 'train':
-                    gt_sat_feat_proj, _, _, gt_uv, _ = self.project_map_to_grd(
-                        sat_feat, None, gt_shiftu, gt_shiftv, gt_heading, level, require_jac=False, gt_depth=gt_depth)
-                    # [B, C, H, W], [B, H, W, 2]
-                    gt_feat_dict[level] = gt_sat_feat_proj # [B, C, H, W]
-                    gt_uv_dict[level] = gt_uv / torch.tensor([sat_feat.shape[-1], sat_feat.shape[-2]], dtype=torch.float32).reshape(1, 1, 1, 2).to(sat_feat.device)
-                    # [B, H, W, 2]
+                # Debug
+                # if level not in gt_uv_dict.keys() and mode == 'train':
+                #     gt_sat_feat_proj, _, _, gt_uv, _ = self.project_map_to_grd(
+                #         sat_feat, None, gt_shiftu, gt_shiftv, gt_heading, level, require_jac=False, gt_depth=gt_depth)
+                #     # [B, C, H, W], [B, H, W, 2]
+                #     gt_feat_dict[level] = gt_sat_feat_proj # [B, C, H, W]
+                #     gt_uv_dict[level] = gt_uv / torch.tensor([sat_feat.shape[-1], sat_feat.shape[-2]], dtype=torch.float32).reshape(1, 1, 1, 2).to(sat_feat.device)
+                #     # [B, H, W, 2]
 
             shift_us_all.append(torch.stack(shift_us, dim=1))  # [B, Level]
             shift_vs_all.append(torch.stack(shift_vs, dim=1))  # [B, Level]
