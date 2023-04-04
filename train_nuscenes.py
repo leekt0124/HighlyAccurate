@@ -406,7 +406,7 @@ def train(net, lr, cfg, device, save_path, model_save_path):
             sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel = [item.to(device) for item in Data[:-1]]
             # gt_shift_u.shape: (1, 1) (batch_size, )
             sample_name = Data[-1]
-            print(f'sample_name: {sample_name}')
+            # print(f'sample_name: {sample_name}')
             # zero the parameter gradients
             optimizer.zero_grad()
      
@@ -506,7 +506,7 @@ def train(net, lr, cfg, device, save_path, model_save_path):
         # torch.save(net.state_dict(), os.path.join(save_path, 'model_' + str(compNum) + '.pth'))
 
         ### ranking test        
-        current = test1(net, args, save_path, bestRankResult, epoch, device)
+        current = test1(net, cfg, save_path, bestRankResult, epoch, device)
         if (current > bestRankResult):
             bestRankResult = current
 
@@ -605,7 +605,7 @@ def main(cfg):
             net.load_state_dict(torch.load(test_model_path))
             # net.load_state_dict(torch.load(os.path.join(save_path, 'model_1.pth')))
             # test1(net, cfg, save_path, 0., epoch=0)
-            test1(net, cfg.highlyaccurate, save_path, 0, epoch=0, device=device)
+            test1(net, cfg, save_path, 0, epoch=0, device=device)
             # test2(net, cfg, save_path, 0., epoch=0)
         
         else:

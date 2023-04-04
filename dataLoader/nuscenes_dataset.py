@@ -516,8 +516,8 @@ class NuScenesDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
 
-        print(f'bev_h: {self.data_config["bev"]["h"]}')
-        print(f'bev_h_meters: {self.data_config["bev"]["h_meters"]}')
+        # print(f'bev_h: {self.data_config["bev"]["h"]}')
+        # print(f'bev_h_meters: {self.data_config["bev"]["h_meters"]}')
 
         sample = self.samples[idx]
 
@@ -588,10 +588,10 @@ class NuScenesDataset(torch.utils.data.Dataset):
         # Calculate meter_per_pixel
         init_lat, init_lon = MAP_ORIGINS[sample['location']]
         _, _, lat, lon =  getLatLongfromPose(init_lat, init_lon, sample['pose_for_satmap'], "MATLAB")
-        print(f"lat = {lat}, lon = {lon}")
+        # print(f"lat = {lat}, lon = {lon}")
         meter_per_pixel = utils.get_meter_per_pixel(lat, self.zoom_level)
         # img_name = grd_image_names[0].split("/")[-1]
-        print(f'meter_per_pixel: {meter_per_pixel}')
+        # print(f'meter_per_pixel: {meter_per_pixel}')
 
         sat_map_filename= SATMAP_PATH + get_satmap_name(grd_image_names[1])
         if not os.path.exists(sat_map_filename):

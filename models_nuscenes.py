@@ -672,12 +672,11 @@ class LM_S2GP(nn.Module):
             self.damping = nn.Parameter(
             torch.zeros(size=(), dtype=torch.float32, requires_grad=True))
 
-        # TODO : take ori_grdH/W from hydra config!
         # ori_grdH, ori_grdW = 256, 1024
         ori_grdH = args.data.image.h
         ori_grdW = args.data.image.w
-        print(f'ori_grdH: {ori_grdH}')
-        print(f'ori_grdW: {ori_grdW}')        
+        # print(f'ori_grdH: {ori_grdH}')
+        # print(f'ori_grdW: {ori_grdW}')        
         xyz_grds = []
         for level in range(4):
             grd_H, grd_W = ori_grdH/(2**(3-level)), ori_grdW/(2**(3-level))
@@ -1139,6 +1138,15 @@ class LM_S2GP(nn.Module):
       
         '''
 
+        # ---------- Multi-level Transformer ----------#
+        '''
+            In order to generate features in multiple levels,
+            In the last layer of the transformer, we should output multiple tensors representing features under different scale
+            Refer to the structure in VGG.py in Highlyaccurate:
+            If level==3: it returns a list of tensors (x15, x18, x21) where 
+
+        '''
+
         # ---------- Satellite Network ------------- #
         # Note: I/E is not used in sat_feat generation
         satnet_input = {'image': sat_map.unsqueeze(1),  'intrinsics': torch.eye(3,device=sat_map.device), 'extrinsics': torch.eye(4, device=sat_map.device).reshape(1, 1, 4, 4)}
@@ -1179,21 +1187,24 @@ class LM_S2GP(nn.Module):
             headings = []
             for level in range(len(sat_feat_list)):
                 
-                print(f'models_nuscenes: sample_name: {sample_name}')
+                # print(f'models_nuscenes: sample_name: {sample_name}')
                 # This is a PARAMETER: which sample are we visualizing within this batch of features?
                 timestamp_idx = 0
+
+                sample_name_idx = int(sample_name[timestamp_idx].split('-')[-1])
+                SAVE_IMAGE = False
+                if sample_name_idx == 1:
+                    SAVE_IMAGE = True
 
                 sat_feat = sat_feat_list[level]
                 B_sat, C_sat, H_sat, W_sat = sat_feat.shape
 
                 meter_per_pixel_feature = meter_per_pixel[0].item() * 4
-                print("meter_per_pixel_feature = ", meter_per_pixel_feature)
-
                 # Extract BEV meter_per_pixel
                 # self.data_dict.bev.h # 128
                 # self.data_dict.bev.h_meters # 100
                 meter_per_pixel_BEV = self.data_dict.bev.h_meters / self.data_dict.bev.h
-                print("meter_per_pixel_BEV = ", meter_per_pixel_BEV)
+                # print("meter_per_pixel_BEV = ", meter_per_pixel_BEV)
 
 
                 H_sat_resize, W_sat_resize = math.floor(H_sat * meter_per_pixel_feature / meter_per_pixel_BEV), math.floor(W_sat * meter_per_pixel_feature / meter_per_pixel_BEV)
@@ -1205,34 +1216,32 @@ class LM_S2GP(nn.Module):
                 sat_feat_resized = sat_feat_transform(sat_feat) 
                 sat_feat_crop = TF.center_crop(sat_feat_resized, self.data_dict.bev.h)
 
+
+                # print("sat_feat.shape = ", sat_feat.shape)
+                # print("----------------------------------------")
+                # print(f'grd_feat.shape = {grd_feat.shape}')
+                # print("----------------------------------")
+
                 sat_feat = sat_feat_crop
-
-                
-
-                print("sat_feat.shape = ", sat_feat.shape)
-                print("----------------------------------------")
-
-                # print(f'sat_feat.shape {sat_feat.shape}')
-                sat_feat_last_3_dim = sat_feat[timestamp_idx, -3:, :, :] # (3, 128, 128)
-                save_image(sat_feat_last_3_dim, f'sat_feat_iter_{iter}_{sample_name[timestamp_idx]}.png')
-
-                test_tensor = torch.randint_like(sat_feat_last_3_dim, low=0, high=255)
-                save_image(test_tensor, "test_tensor.png")
-
-                test2_tensor = torch.rand_like(sat_feat_last_3_dim)
-                save_image(test2_tensor, "test2_tensor.png")
-
                 sat_conf = sat_conf_list[level]
                 grd_feat = grd_feat_list[level]
-                print(f'grd_feat.shape = {grd_feat.shape}')
-                print("----------------------------------")
-                grd_feat_last_3_dim = grd_feat[timestamp_idx, -3:, :, :]
-                save_image(grd_feat_last_3_dim, f"grd_feat_iter_{iter}_{sample_name[timestamp_idx]}.png")
-
                 grd_conf = grd_conf_list[level]
+
+                if SAVE_IMAGE:
+                    # print(f'sat_feat.shape {sat_feat.shape}')
+                    sat_feat_last_3_dim = sat_feat[timestamp_idx, -3:, :, :] # (3, 128, 128)
+                    save_image(sat_feat_last_3_dim, f'sat_feat_iter_{iter}_{sample_name[timestamp_idx]}.png')
+
+                    # test_tensor = torch.randint_like(sat_feat_last_3_dim, low=0, high=255)
+                    # save_image(test_tensor, "test_tensor.png")
+
+                    # test2_tensor = torch.rand_like(sat_feat_last_3_dim)
+                    # save_image(test2_tensor, "test2_tensor.png")
+
+                    grd_feat_last_3_dim = grd_feat[timestamp_idx, -3:, :, :]
+                    save_image(grd_feat_last_3_dim, f"grd_feat_iter_{iter}_{sample_name[timestamp_idx]}.png")
+
                 grd_H, grd_W = grd_feat.shape[-2:]
-
-
                 sat_feat_proj = sat_feat      
 
                 small_const = 0.1
@@ -1252,8 +1261,6 @@ class LM_S2GP(nn.Module):
                 dfeat_dpose_new[0,...] = sat_feat_shiftu - sat_feat 
                 sat_feat_shiftv = F.pad(sat_feat[:, :, 1:, :], (0,0,0,1), "constant", 0)
                 dfeat_dpose_new[1,...] = sat_feat_shiftv - sat_feat                 
-                
-
                 
                 '''
                     dR_dtheta       (B, 3, 3)
