@@ -1247,6 +1247,39 @@ class LM_S2GP(nn.Module):
                 # Key element for LM update!
                 dfeat_dpose_new = torch.ones([3, B, C, self.data_dict.bev.h, self.data_dict.bev.h], device=shift_u.device) #dfeat_dpose               
 
+                # dfeat_dpose_new = torch.ones([3, B, C, H, W], device=shift_u.device) #dfeat_dpose    
+
+                sat_feat_shiftu = F.pad(sat_feat[:, :, :, 1:], (1), "constant", 0)
+                dfeat_dpose_new[0] = sat_feat_shiftu - sat_feat 
+                sat_feat_shiftv = F.pad(sat_feat[:, :, 1:, :], (1), "constant", 0)
+                dfeat_dpose_new[1] = sat_feat_shiftv - sat_feat                 
+                
+                cos = torch.cos(heading)        # (B,) where B = 4(batch size)
+                sin = torch.sin(heading)        # (B,)
+                zeros = torch.zeros_like(cos)   # (B,)
+                dR_dtheta = self.args.rotation_range / 180 * np.pi * \
+                            torch.cat([-sin, zeros, -cos, zeros, zeros, zeros, cos, zeros, -sin], dim=-1)  # shape = [B, 9]
+                dR_dtheta = dR_dtheta.view(B, 3, 3)      
+
+                # Need: xyz_bev, Tbev2sat, R_bev2sat(bev2sat)
+                _, _, bev_H, bev_W = grd_feat.shape
+                v, u = torch.meshgrid(torch.arange(0, bev_H, dtype=torch.float32),
+                                    torch.arange(0, bev_W, dtype=torch.float32))
+                xyz_bev = torch.stack([u, v, torch.ones_like(u)], dim=-1).unsqueeze(dim=0)  # [1, grd_H, grd_W, 3]                
+                camera_height = utils.get_camera_height()
+                # camera offset, shift[0]:east,Z, shift[1]:north,X
+                height = camera_height * torch.ones_like(shift_u[:, :1])                
+                Tbev2sat = torch.cat([shift_v, height, -shift_u], dim=-1)  # shape = [B, 3]
+                R_bev2sat = torch.tensor([0, 0, 1, 1, 0, 0], \
+                            dtype=torch.float32, device=dR_dtheta.device, requires_grad=True).reshape(2, 3)
+
+                dxyz_dtheta = torch.sum(dR_dtheta[:, None, None, :, :] * xyz_bev[:, :, :, None, :], dim=-1) + \
+                            torch.sum(-dR_dtheta * Tbev2sat[:, None, :], dim=-1)[:, None, None, :]
+                duv_dtheta = 1 / meter_per_pixel * \
+                        torch.sum(R_bev2sat[None, None, None, :, :] * dxyz_dtheta[:, :, :, None, :], dim=-1)
+                dfeat_dpose_new[2] = duv_dtheta        
+
+
                 if self.args.Optimizer == 'LM':
                     # Check devices                 
                     shift_u_new, shift_v_new, heading_new = self.LM_update(shift_u, shift_v, heading,
