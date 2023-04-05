@@ -1137,6 +1137,9 @@ class LM_S2GP(nn.Module):
         * If batch_size = 4: kernel attention has problem (satellite net)
       
         '''
+        # ---------------Debug Section --------------- #
+        print("gt_shiftu = ", gt_shiftu)
+        print("gt_shiftv = ", gt_shiftv)
 
         # ---------- Multi-level Transformer ----------#
         '''
@@ -1201,6 +1204,9 @@ class LM_S2GP(nn.Module):
         shift_v = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
         heading = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
 
+        shift_u = shift_u * self.args.shift_range_lon / meter_per_pixel[0]
+        shift_v = shift_v * self.args.shift_range_lat / meter_per_pixel[0]
+
         gt_uv_dict = {}
         gt_feat_dict = {}
         pred_uv_dict = {}
@@ -1235,7 +1241,6 @@ class LM_S2GP(nn.Module):
                 meter_per_pixel_sat_feat = meter_per_pixel[0].item() * (self.data_dict.satellite_image.h/H_sat)
                 # Extract BEV meter_per_pixel
                 meter_per_pixel_BEV = self.data_dict.bev.h_meters / H_grd
-
                 H_sat_resize, W_sat_resize = math.floor(H_sat * meter_per_pixel_sat_feat / meter_per_pixel_BEV), math.floor(W_sat * meter_per_pixel_sat_feat / meter_per_pixel_BEV)
                 # print(f'H_sat_resize: {H_sat_resize}, W_sat_resize: {W_sat_resize}')
                 # print(f'H_grd {H_grd}')
@@ -1261,10 +1266,6 @@ class LM_S2GP(nn.Module):
                     # print(f'sat_feat.shape {sat_feat.shape}')
                     sat_feat_last_3_dim = sat_feat[timestamp_idx, -3:, :, :] # (3, 128, 128)
                     save_image(sat_feat_last_3_dim, f'sat_feat_iter_{iter}_{sample_name[timestamp_idx]}.png')
-                    # test_tensor = torch.randint_like(sat_feat_last_3_dim, low=0, high=255)
-                    # save_image(test_tensor, "test_tensor.png")
-                    # test2_tensor = torch.rand_like(sat_feat_last_3_dim)
-                    # save_image(test2_tensor, "test2_tensor.png")
 
                     grd_feat_last_3_dim = grd_feat[timestamp_idx, -3:, :, :]
                     save_image(grd_feat_last_3_dim, f"grd_feat_iter_{iter}_{sample_name[timestamp_idx]}.png")
@@ -1339,6 +1340,10 @@ class LM_S2GP(nn.Module):
                                                             grd_feat_new,
                                                             grd_conf_new,
                                                             dfeat_dpose_new)  # only need to compare bottom half
+                    
+                    print("shift_u_new = ", shift_u_new)
+                    print("shift_v_new = ", shift_v_new)
+                    
                 elif self.args.Optimizer == 'SGD':
                     r = sat_feat_proj[:, :, grd_H // 2:, :] - grd_feat[:, :, grd_H // 2:, :]
                     p = torch.mean(torch.abs(r), dim=[1, 2, 3])  # *100 #* 256 * 256 * 3

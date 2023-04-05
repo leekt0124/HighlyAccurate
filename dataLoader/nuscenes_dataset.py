@@ -622,9 +622,9 @@ class NuScenesDataset(torch.utils.data.Dataset):
         # the homography is defined on: from target pixel to source pixel
         # now east direction is the real vehicle heading direction
 
-        gt_shift_x = np.random.uniform(-1, 1) * self.shift_range_meters_lat / meter_per_pixel  # (pixels)
-        gt_shift_y = np.random.uniform(-1, 1) * self.shift_range_meters_lon / meter_per_pixel  # (pixels)
-        gt_theta = np.random.uniform(-1, 1) * self.rotation_range # (degrees)
+        gt_shift_x = np.random.uniform(-1, 1)  # (pixels)
+        gt_shift_y = np.random.uniform(-1, 1)  # (pixels)
+        gt_theta = np.random.uniform(-1, 1) # (degrees)
 
         ADDING_GT_TRANSFORM = True # Set this to False if you want to check unshifted dataset
         if not ADDING_GT_TRANSFORM:
@@ -636,12 +636,12 @@ class NuScenesDataset(torch.utils.data.Dataset):
         sat_rand_shift = \
             sat_rot.transform(
                 sat_rot.size, Image.AFFINE,
-                (1, 0, gt_shift_x,
-                0, 1, gt_shift_y),
+                (1, 0, gt_shift_x * self.shift_range_meters_lon / meter_per_pixel,
+                0, 1, gt_shift_y * self.shift_range_meters_lat / meter_per_pixel),
                 resample=Image.BILINEAR)
 
         sat_rand_shift_rand_rot = \
-            sat_rand_shift.rotate(gt_theta)
+            sat_rand_shift.rotate(gt_theta * self.rotation_range)
         
         # # Get nuscenes meter per pixel
         # nuscenes_meter_per_pixel = self.data_config["bev"]["h_meters"] / self.data_config["bev"]["h"]
