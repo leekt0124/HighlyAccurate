@@ -1232,16 +1232,13 @@ class LM_S2GP(nn.Module):
                 sat_feat = sat_feat_list[level]
                 B_sat, C_sat, H_sat, W_sat = sat_feat.shape
                 # B, C, H, W = sat_feat.shape
-
-                meter_per_pixel_feature = meter_per_pixel[0].item() * 4
+                meter_per_pixel_sat_feat = meter_per_pixel[0].item() * (self.data_dict.satellite_image.h/H_sat)
                 # Extract BEV meter_per_pixel
-                # H_sat # 128
-                # H_sat_meters # 100
-                meter_per_pixel_BEV = self.data_dict.bev.h_meters / H_sat
-                # print("meter_per_pixel_BEV = ", meter_per_pixel_BEV)
+                meter_per_pixel_BEV = self.data_dict.bev.h_meters / H_grd
 
-
-                H_sat_resize, W_sat_resize = math.floor(H_sat * meter_per_pixel_feature / meter_per_pixel_BEV), math.floor(W_sat * meter_per_pixel_feature / meter_per_pixel_BEV)
+                H_sat_resize, W_sat_resize = math.floor(H_sat * meter_per_pixel_sat_feat / meter_per_pixel_BEV), math.floor(W_sat * meter_per_pixel_sat_feat / meter_per_pixel_BEV)
+                # print(f'H_sat_resize: {H_sat_resize}, W_sat_resize: {W_sat_resize}')
+                # print(f'H_grd {H_grd}')
                 sat_feat_transform = transforms.Resize(size=(H_sat_resize, W_sat_resize))                
                 sat_feat_resized = sat_feat_transform(sat_feat) 
                 sat_feat_crop = TF.center_crop(sat_feat_resized, H_grd)
@@ -1254,15 +1251,18 @@ class LM_S2GP(nn.Module):
 
                 sat_feat = sat_feat_crop
   
+                # sat_feat_last_3_dim = sat_feat[timestamp_idx, -3:, :, :] # (3, 128, 128)
+                # save_image(sat_feat_last_3_dim, f'sat_feat_level_{level}_{sample_name[timestamp_idx]}.png')
+                # grd_feat_last_3_dim = grd_feat[timestamp_idx, -3:, :, :]
+                # save_image(grd_feat_last_3_dim, f"grd_feat_level_{level}_{sample_name[timestamp_idx]}.png")
+
 
                 if SAVE_IMAGE:
                     # print(f'sat_feat.shape {sat_feat.shape}')
                     sat_feat_last_3_dim = sat_feat[timestamp_idx, -3:, :, :] # (3, 128, 128)
                     save_image(sat_feat_last_3_dim, f'sat_feat_iter_{iter}_{sample_name[timestamp_idx]}.png')
-
                     # test_tensor = torch.randint_like(sat_feat_last_3_dim, low=0, high=255)
                     # save_image(test_tensor, "test_tensor.png")
-
                     # test2_tensor = torch.rand_like(sat_feat_last_3_dim)
                     # save_image(test2_tensor, "test2_tensor.png")
 
