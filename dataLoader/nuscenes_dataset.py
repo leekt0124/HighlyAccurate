@@ -690,8 +690,8 @@ def load_train_data(data_config, GrdImg_H, GrdImg_W, version, dataset_dir, label
         transforms.ToTensor(),
     ])
 
-    print(f'GrdImg_H: {GrdImg_H}')
-    print(f'GrdImg_W: {GrdImg_W}')    
+    # print(f'GrdImg_H: {GrdImg_H}')
+    # print(f'GrdImg_W: {GrdImg_W}')    
     
     Grd_h = GrdImg_H 
     Grd_w = GrdImg_W

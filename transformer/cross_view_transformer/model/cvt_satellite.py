@@ -72,10 +72,6 @@ class CrossViewTransformer(nn.Module):
         zs = []
         for i in range(len(ys)):
             z = self.to_logits_list[i](ys[i])
-            # Resize z to match grd_feat
-            # size_ = int(z.shape[-1] * (self.decoder_block_channels[-1]/160)) # 64/160
-            # z = F.interpolate(z, size=size_, mode='bilinear')
-            # print(f'z.shape {z.shape}')
             zs.append(z) 
 
         output_dict = {}

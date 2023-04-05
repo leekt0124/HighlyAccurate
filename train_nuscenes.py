@@ -62,17 +62,23 @@ def test1( net_test, cfg, save_path, best_rank_result, epoch, device):
     args = cfg.highlyaccurate
     ### net evaluation state
     net_test.eval()
-    dataloader = load_val_data(cfg.data, args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir, args.loader, \
-                               args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir, args.zoom_level)
+    # dataloader = load_val_data(cfg.data, args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir, args.loader, \
+                            #    args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir, args.zoom_level)
+    dataloader = load_train_data(cfg.data, args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir, args.loader, \
+                               args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir, args.zoom_level)    
     pred_shifts = []
     pred_headings = []
     gt_shifts = []
     gt_headings = []
 
     start_time = time.time()
+    print("------- Validating... test1 ==----------")
     for i, data in enumerate(dataloader, 0):
 
-        if i > 10:
+        if i >= 1:
+            # import sys
+            # sys.exit()
+            print(f' Done epoch {epoch}')
             break
 
         sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel = [item.to(device) for item in data[:-1]]
@@ -112,8 +118,8 @@ def test1( net_test, cfg, save_path, best_rank_result, epoch, device):
     gt_shifts = np.concatenate(gt_shifts, axis=0) * np.array([args.shift_range_lat, args.shift_range_lon]).reshape(1, 2)
     gt_headings = np.concatenate(gt_headings, axis=0) * args.rotation_range
        
-    print(f'gt_shifts.shape {gt_shifts.shape}')     # (200, 2)
-    print(f'pred_shifts.shape {pred_shifts.shape}') # (800, 2)
+    # print(f'gt_shifts.shape {gt_shifts.shape}')     # (200, 2)
+    # print(f'pred_shifts.shape {pred_shifts.shape}') # (800, 2)
 
     scio.savemat(os.path.join(save_path, 'Test1_results.mat'), {'gt_shifts': gt_shifts, 'gt_headings': gt_headings,
                                                          'pred_shifts': pred_shifts, 'pred_headings': pred_headings})
@@ -360,6 +366,7 @@ def train(net, lr, cfg, device, save_path, model_save_path):
     print(f'resume: {args.resume}')
     print(f'epochs: {args.epochs}')
     for epoch in range(args.resume, args.epochs):
+        print(f'\n-------- Epoch {epoch}----------')
         net.train()
 
         base_lr = lr
@@ -381,19 +388,24 @@ def train(net, lr, cfg, device, save_path, model_save_path):
         loss_vec = []
 
         # For v1.0-trainval: batch_size:  4 => num of batches: 7033
-        print(f'batch_size:  {args.loader.batch_size}\nnum of batches: {len(trainloader)}')
+        # print(f'batch_size:  {args.loader.batch_size}\nnum of batches: {len(trainloader)}')
 
 
         # Initialize last_model_save_path
         last_model_save_path = model_save_path
 
         for Loop, Data in enumerate(trainloader, 0):
+
+            # 04/05: Try Overfitting on a small dataset (ONLY A SINGLE IMAGE!)
+
             # print("len(Data) = ", len(Data))
             # print("Loop = ", Loop)
 
-            # if Loop > 5:
-            #     import sys
-            #     sys.exit()
+            if Loop >= 1:
+                # import sys
+                # sys.exit()
+                print(f' Done epoch {epoch}')
+                break
 
             # Early stopping (leekt)
             # if Loop > 10:
@@ -643,4 +655,5 @@ def main(cfg):
 if __name__ == '__main__':
     torch.cuda.empty_cache()
     main()
+    torch.cuda.empty_cache()
   

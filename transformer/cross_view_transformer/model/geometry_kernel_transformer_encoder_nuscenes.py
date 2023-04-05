@@ -589,8 +589,9 @@ class GeometryKernelEncoder(nn.Module):
         feature[0] [6, 32, 64, 256]
         feature[1] [6, 112, 16, 64]
 
-       
+
         GKT:
+        Batch_size = 4
         Grd Img shape: torch.Size([4, 6, 3, 224, 480])
         intrinsics shape: torch.Size([4, 6, 3, 3])
         extrinsics shape: torch.Size([4, 6, 4, 4])        

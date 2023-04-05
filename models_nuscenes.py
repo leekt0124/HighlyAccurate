@@ -1138,6 +1138,7 @@ class LM_S2GP(nn.Module):
       
         '''
         # ---------------Debug Section --------------- #
+        print("\n======================================")
         print("gt_shiftu = ", gt_shiftu) # unit: meters
         print("gt_shiftv = ", gt_shiftv)
 
@@ -1173,9 +1174,9 @@ class LM_S2GP(nn.Module):
         satnet_input = {'image': sat_map.unsqueeze(1),  'intrinsics': torch.eye(3,device=sat_map.device), 'extrinsics': torch.eye(4, device=sat_map.device).reshape(1, 1, 4, 4)}
         sat_feat_dict= self.SatFeatureNet(satnet_input)
         sat_feat_list = sat_feat_dict['bev']
-        print(f'sat_feat_list.size: {len(sat_feat_list)}')
-        for sat_feat in sat_feat_list:
-            print(f'    sat_feat.shape {sat_feat.shape}')        
+        # print(f'sat_feat_list.size: {len(sat_feat_list)}')
+        # for sat_feat in sat_feat_list:
+            # print(f'    sat_feat.shape {sat_feat.shape}')        
         # for _ in range(len(sat_feat_dict)):
         #     sat_feat_list.append(sat_feat_dict['bev'])
         B, C, H, W = sat_feat_list[0].shape
@@ -1184,9 +1185,9 @@ class LM_S2GP(nn.Module):
         grdnet_input = {'image': grd_imgs, 'intrinsics': intrinsics, 'extrinsics':extrinsics}
         grd_feat_dict = self.GrdFeatureNet(grdnet_input)
         grd_feat_list = grd_feat_dict['bev']
-        print(f'grd_feat_list.size: {len(grd_feat_list)}')
-        for grd_feat in grd_feat_list:
-            print(f'    grd_feat.shape {grd_feat.shape}')
+        # print(f'grd_feat_list.size: {len(grd_feat_list)}')
+        # for grd_feat in grd_feat_list:
+            # print(f'    grd_feat.shape {grd_feat.shape}')
         # for _ in range(len(grd_feat_dict)):
             # grd_feat_list.append(grd_feat_dict['bev']) # (1, 3, 64, 64) 
         
@@ -1231,11 +1232,12 @@ class LM_S2GP(nn.Module):
                 timestamp_idx = 0
 
                 sample_name_idx = int(sample_name[timestamp_idx].split('-')[-1])
-                SAVE_IMAGE = False
-                if sample_name_idx == 1:
-                    SAVE_IMAGE = True
+                SAVE_IMAGE = True
+                # if sample_name_idx == 1:
+                    # SAVE_IMAGE = True
 
                 sat_feat = sat_feat_list[level]
+                
                 B_sat, C_sat, H_sat, W_sat = sat_feat.shape
                 # B, C, H, W = sat_feat.shape
                 meter_per_pixel_sat_feat = meter_per_pixel[0].item() * (self.data_dict.satellite_image.h/H_sat)
@@ -1246,18 +1248,14 @@ class LM_S2GP(nn.Module):
                 # print(f'H_grd {H_grd}')
                 sat_feat_transform = transforms.Resize(size=(H_sat_resize, W_sat_resize))                
                 sat_feat_resized = sat_feat_transform(sat_feat) 
-<<<<<<< HEAD
-                sat_feat_crop = TF.center_crop(sat_feat_resized, H_grd)
-=======
 
                 sat_feat_transformed = sat_feat_resized.clone()
 
                 for b in range(B_sat):
                     sat_feat_transformed[b] = TF.affine(sat_feat_resized[b], angle=heading[b].item(), translate=(0, 0), scale=1.0, shear=0)
-                    sat_feat_transformed[b] = TF.affine(sat_feat_resized[b], angle=0.0, translate=(shift_u[b].item() / meter_per_pixel_feature, shift_v[b].item() / meter_per_pixel_feature), scale=1.0, shear=0)
+                    sat_feat_transformed[b] = TF.affine(sat_feat_resized[b], angle=0.0, translate=(shift_u[b].item() / meter_per_pixel_sat_feat, shift_v[b].item() / meter_per_pixel_sat_feat), scale=1.0, shear=0)
 
-                sat_feat_crop = TF.center_crop(sat_feat_transformed, self.data_dict.bev.h)
->>>>>>> 2471883 (Updated sat_feat trasform)
+                sat_feat_crop = TF.center_crop(sat_feat_transformed, H_grd)
 
 
                 # print("sat_feat.shape = ", sat_feat.shape)
@@ -1266,6 +1264,7 @@ class LM_S2GP(nn.Module):
                 # print("----------------------------------")
 
                 sat_feat = sat_feat_crop
+                # print(f'    sat_feat after transform and crop: {sat_feat.shape}') 
   
                 # sat_feat_last_3_dim = sat_feat[timestamp_idx, -3:, :, :] # (3, 128, 128)
                 # save_image(sat_feat_last_3_dim, f'sat_feat_level_{level}_{sample_name[timestamp_idx]}.png')
@@ -1276,10 +1275,10 @@ class LM_S2GP(nn.Module):
                 if SAVE_IMAGE:
                     # print(f'sat_feat.shape {sat_feat.shape}')
                     sat_feat_last_3_dim = sat_feat[timestamp_idx, -3:, :, :] # (3, 128, 128)
-                    save_image(sat_feat_last_3_dim, f'sat_feat_iter_{iter}_{sample_name[timestamp_idx]}.png')
+                    save_image(sat_feat_last_3_dim, f'sat_feat_level_{level}_{sample_name[timestamp_idx]}.png')
 
                     grd_feat_last_3_dim = grd_feat[timestamp_idx, -3:, :, :]
-                    save_image(grd_feat_last_3_dim, f"grd_feat_iter_{iter}_{sample_name[timestamp_idx]}.png")
+                    save_image(grd_feat_last_3_dim, f"grd_feat_level_{level}_{sample_name[timestamp_idx]}.png")
 
                 grd_H, grd_W = grd_feat.shape[-2:]
                 sat_feat_proj = sat_feat      
@@ -1351,9 +1350,9 @@ class LM_S2GP(nn.Module):
                                                             grd_feat_new,
                                                             grd_conf_new,
                                                             dfeat_dpose_new)  # only need to compare bottom half
-                    
-                    print("shift_u_new = ", shift_u_new)
-                    print("shift_v_new = ", shift_v_new)
+                    # print(f'    iter {iter}')
+                    # print(f'        shift_u_new {shift_u_new}')
+                    # print(f'        shift_v_new {shift_v_new}')
 
                 elif self.args.Optimizer == 'SGD':
                     r = sat_feat_proj[:, :, grd_H // 2:, :] - grd_feat[:, :, grd_H // 2:, :]
