@@ -1138,7 +1138,7 @@ class LM_S2GP(nn.Module):
       
         '''
         # ---------------Debug Section --------------- #
-        print("gt_shiftu = ", gt_shiftu)
+        print("gt_shiftu = ", gt_shiftu) # unit: meters
         print("gt_shiftv = ", gt_shiftv)
 
         # ---------- Multi-level Transformer ----------#
@@ -1200,12 +1200,12 @@ class LM_S2GP(nn.Module):
             grd_conf_list.append(ones)
 
         # ---------- shift_u, shif_v, heading initialization -------------------------------------- #
-        shift_u = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
+        shift_u = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device) # unit: pixel
         shift_v = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
         heading = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
 
-        shift_u = shift_u * self.args.shift_range_lon / meter_per_pixel[0]
-        shift_v = shift_v * self.args.shift_range_lat / meter_per_pixel[0]
+        # shift_u = shift_u * self.args.shift_range_lon / meter_per_pixel[0]
+        # shift_v = shift_v * self.args.shift_range_lat / meter_per_pixel[0]
 
         gt_uv_dict = {}
         gt_feat_dict = {}
@@ -1246,7 +1246,18 @@ class LM_S2GP(nn.Module):
                 # print(f'H_grd {H_grd}')
                 sat_feat_transform = transforms.Resize(size=(H_sat_resize, W_sat_resize))                
                 sat_feat_resized = sat_feat_transform(sat_feat) 
+<<<<<<< HEAD
                 sat_feat_crop = TF.center_crop(sat_feat_resized, H_grd)
+=======
+
+                sat_feat_transformed = sat_feat_resized.clone()
+
+                for b in range(B_sat):
+                    sat_feat_transformed[b] = TF.affine(sat_feat_resized[b], angle=heading[b].item(), translate=(0, 0), scale=1.0, shear=0)
+                    sat_feat_transformed[b] = TF.affine(sat_feat_resized[b], angle=0.0, translate=(shift_u[b].item() / meter_per_pixel_feature, shift_v[b].item() / meter_per_pixel_feature), scale=1.0, shear=0)
+
+                sat_feat_crop = TF.center_crop(sat_feat_transformed, self.data_dict.bev.h)
+>>>>>>> 2471883 (Updated sat_feat trasform)
 
 
                 # print("sat_feat.shape = ", sat_feat.shape)
@@ -1343,7 +1354,7 @@ class LM_S2GP(nn.Module):
                     
                     print("shift_u_new = ", shift_u_new)
                     print("shift_v_new = ", shift_v_new)
-                    
+
                 elif self.args.Optimizer == 'SGD':
                     r = sat_feat_proj[:, :, grd_H // 2:, :] - grd_feat[:, :, grd_H // 2:, :]
                     p = torch.mean(torch.abs(r), dim=[1, 2, 3])  # *100 #* 256 * 256 * 3
