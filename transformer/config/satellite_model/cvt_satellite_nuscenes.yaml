@@ -1,7 +1,10 @@
 # This is the yaml file for the satellite transformer model
 _target_: transformer.cross_view_transformer.model.cvt_satellite.CrossViewTransformer
 
+level: 3
+decoder_block_channels: ${model.decoder.blocks}
 dim_last: 64
+bev_h: ${model.encoder.bev_embedding.bev_height}
 
 outputs:
   bev: [0, 10]
@@ -48,7 +51,7 @@ decoder:
   _target_: transformer.cross_view_transformer.model.decoder.Decoder
 
   dim: ${model.encoder.dim}
-  blocks: [128, 128, 64]
+  blocks: [256, 128, 64]
   residual: True
   factor: 2
 

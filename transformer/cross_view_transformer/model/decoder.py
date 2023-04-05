@@ -71,12 +71,16 @@ class Decoder(nn.Module):
     def forward(self, x):
         y = x
 
+        ys = []
         for layer in self.layers:
             y = layer(y, x)
+            ys.append(y)
             '''
-            y.shape: torch.Size([1, 128, 16, 16])
-            y.shape: torch.Size([1, 128, 32, 32])
-            y.shape: torch.Size([1, 256, 64, 64])          
+            Set channel dimensions to be [256, 128, 64]
+            Final bev_h/w (the finest): 256
+            Decoder: y.shape torch.Size([4, 256, 64, 64])
+            Decoder: y.shape torch.Size([4, 128, 128, 128])
+            Decoder: y.shape torch.Size([4, 64, 256, 256])     
             '''
 
-        return y
+        return ys

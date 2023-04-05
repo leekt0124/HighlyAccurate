@@ -140,9 +140,9 @@ class VGGUnet(nn.Module):
         x14 = self.conv14(x13)
         x15, ind15 = self.max_pool(x14)  # [H/8, W/8]
 
-        # dec1
+        # dec1 # resample it to be x8.shape (2x larger)
         x16 = F.interpolate(x15, [x8.shape[2], x9.shape[3]], mode="nearest")
-        x17 = torch.cat([x16, x8], dim=1)
+        x17 = torch.cat([x16, x8], dim=1) # 2x in Channel dimensino
         x18 = self.conv_dec1(x17)  # [H/4, W/4]
 
         # dec2

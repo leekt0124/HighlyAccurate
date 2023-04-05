@@ -1144,6 +1144,24 @@ class LM_S2GP(nn.Module):
             In the last layer of the transformer, we should output multiple tensors representing features under different scale
             Refer to the structure in VGG.py in Highlyaccurate:
             If level==3: it returns a list of tensors (x15, x18, x21) where 
+            Feature shapes would be: (1, 256, 64, 64) (1, 128, 128, 128) (1, 64, 256, 256)
+            Simply append them would be fine
+
+            Currently:
+            level==1:
+                sat_feat.shape B,C, bev_h, bev_w (4, 10, 128, 128)
+                grd_feat.shape B,C, bev_h, bev_w (4, 10, 128, 128)
+
+            Change C to be 12:
+                sat_feat.shape B,C, bev_h, bev_w (4, 64, 128, 128)
+                grd_feat.shape B,C, bev_h, bev_w (4, 64, 128, 128)            
+            Want: 
+            level==2:
+                sat_feat.shape B,C, bev_h, bev_w (4, 32, 256, 256)
+                grd_feat.shape B,C, bev_h, bev_w (4, 32, 256, 256)            
+            level==3:
+                sat_feat.shape B,C, bev_h, bev_w (4, 16, 512, 512)
+                grd_feat.shape B,C, bev_h, bev_w (4, 16, 512, 512)            
 
         '''
 
@@ -1151,23 +1169,32 @@ class LM_S2GP(nn.Module):
         # Note: I/E is not used in sat_feat generation
         satnet_input = {'image': sat_map.unsqueeze(1),  'intrinsics': torch.eye(3,device=sat_map.device), 'extrinsics': torch.eye(4, device=sat_map.device).reshape(1, 1, 4, 4)}
         sat_feat_dict= self.SatFeatureNet(satnet_input)
-        sat_feat_list = []
-        for _ in range(len(sat_feat_dict)):
-            sat_feat_list.append(sat_feat_dict['bev'])
+        sat_feat_list = sat_feat_dict['bev']
+        print(f'sat_feat_list.size: {len(sat_feat_list)}')
+        for sat_feat in sat_feat_list:
+            print(f'    sat_feat.shape {sat_feat.shape}')        
+        # for _ in range(len(sat_feat_dict)):
+        #     sat_feat_list.append(sat_feat_dict['bev'])
         B, C, H, W = sat_feat_list[0].shape
         
         # ---------- GroundImgs Network ------------- #
         grdnet_input = {'image': grd_imgs, 'intrinsics': intrinsics, 'extrinsics':extrinsics}
         grd_feat_dict = self.GrdFeatureNet(grdnet_input)
-        grd_feat_list = []
-        for _ in range(len(grd_feat_dict)):
-            grd_feat_list.append(grd_feat_dict['bev']) # (1, 3, 64, 64) 
+        grd_feat_list = grd_feat_dict['bev']
+        print(f'grd_feat_list.size: {len(grd_feat_list)}')
+        for grd_feat in grd_feat_list:
+            print(f'    grd_feat.shape {grd_feat.shape}')
+        # for _ in range(len(grd_feat_dict)):
+            # grd_feat_list.append(grd_feat_dict['bev']) # (1, 3, 64, 64) 
         
-        # TODO: Modify grd_conf_list
+        sat_conf_list = []
+        grd_conf_list = []
         conf_tensor = torch.ones([B, 1, H, W])
         scale = 0.1
-        sat_conf_list = [torch.ones_like(conf_tensor, device=sat_map.device)*scale ]       
-        grd_conf_list = [torch.ones_like(conf_tensor, device=sat_map.device)*scale ]
+        ones = torch.ones_like(conf_tensor, device=sat_map.device)*scale
+        for _ in range(len(sat_feat_list)):
+            sat_conf_list.append(ones)
+            grd_conf_list.append(ones)
 
         # ---------- shift_u, shif_v, heading initialization -------------------------------------- #
         shift_u = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
@@ -1187,6 +1214,12 @@ class LM_S2GP(nn.Module):
             headings = []
             for level in range(len(sat_feat_list)):
                 
+
+                sat_conf = sat_conf_list[level]
+                grd_feat = grd_feat_list[level]
+                _, _, H_grd, W_grd = grd_feat.shape
+                grd_conf = grd_conf_list[level]       
+
                 # print(f'models_nuscenes: sample_name: {sample_name}')
                 # This is a PARAMETER: which sample are we visualizing within this batch of features?
                 timestamp_idx = 0
@@ -1198,23 +1231,20 @@ class LM_S2GP(nn.Module):
 
                 sat_feat = sat_feat_list[level]
                 B_sat, C_sat, H_sat, W_sat = sat_feat.shape
+                # B, C, H, W = sat_feat.shape
 
                 meter_per_pixel_feature = meter_per_pixel[0].item() * 4
                 # Extract BEV meter_per_pixel
-                # self.data_dict.bev.h # 128
-                # self.data_dict.bev.h_meters # 100
-                meter_per_pixel_BEV = self.data_dict.bev.h_meters / self.data_dict.bev.h
+                # H_sat # 128
+                # H_sat_meters # 100
+                meter_per_pixel_BEV = self.data_dict.bev.h_meters / H_sat
                 # print("meter_per_pixel_BEV = ", meter_per_pixel_BEV)
 
 
                 H_sat_resize, W_sat_resize = math.floor(H_sat * meter_per_pixel_feature / meter_per_pixel_BEV), math.floor(W_sat * meter_per_pixel_feature / meter_per_pixel_BEV)
-                
-
-
-                sat_feat_transform = transforms.Resize(size=(H_sat_resize, W_sat_resize))
-                
+                sat_feat_transform = transforms.Resize(size=(H_sat_resize, W_sat_resize))                
                 sat_feat_resized = sat_feat_transform(sat_feat) 
-                sat_feat_crop = TF.center_crop(sat_feat_resized, self.data_dict.bev.h)
+                sat_feat_crop = TF.center_crop(sat_feat_resized, H_grd)
 
 
                 # print("sat_feat.shape = ", sat_feat.shape)
@@ -1223,9 +1253,7 @@ class LM_S2GP(nn.Module):
                 # print("----------------------------------")
 
                 sat_feat = sat_feat_crop
-                sat_conf = sat_conf_list[level]
-                grd_feat = grd_feat_list[level]
-                grd_conf = grd_conf_list[level]
+  
 
                 if SAVE_IMAGE:
                     # print(f'sat_feat.shape {sat_feat.shape}')
@@ -1253,9 +1281,10 @@ class LM_S2GP(nn.Module):
                 grd_feat_new = grd_feat
                 grd_conf_new = grd_conf
 
+
                 # ------------- Partial Derivative of Features w.r.t. Pose(shift_u, shift_v, theta) for LM Optimization ------------- #
-                dfeat_dpose_new = torch.ones([3, B, C, self.data_dict.bev.h, self.data_dict.bev.h], device=shift_u.device) #dfeat_dpose               
-                # dfeat_dpose_new = torch.ones([3, B, C, H, W], device=shift_u.device) #dfeat_dpose    
+                # Note: we should use 'H_grd', 'W_grd' from grd_feat (Foo BEV)
+                dfeat_dpose_new = torch.ones([3, B_sat, C_sat, H_grd, W_grd], device=shift_u.device)   
 
                 sat_feat_shiftu = F.pad(sat_feat[:, :, :, 1:], (0,1), "constant", 0)
                 dfeat_dpose_new[0,...] = sat_feat_shiftu - sat_feat 
@@ -1276,7 +1305,7 @@ class LM_S2GP(nn.Module):
                 zeros = torch.zeros_like(cos)   # (B,)
                 dR_dtheta = self.args.rotation_range / 180 * np.pi * \
                             torch.cat([-sin, zeros, -cos, zeros, zeros, zeros, cos, zeros, -sin], dim=-1)  # shape = [B, 9]
-                dR_dtheta = dR_dtheta.view(B, 3, 3)      
+                dR_dtheta = dR_dtheta.view(B_sat, 3, 3)      
 
                 # Need: xyz_bev, Tbev2sat, R_bev2sat(bev2sat)
                 _, _, bev_H, bev_W = grd_feat.shape
@@ -1298,7 +1327,7 @@ class LM_S2GP(nn.Module):
                 duv_dtheta = 1 / meter_per_pixel[0] * \
                         torch.sum(R_bev2sat[None, None, None, :, :] * dxyz_dtheta[:, :, :, None, :], dim=-1)  
                 # (B, bev_h, bev_w, 2)  => (B, 1, bev_h, bev_w, 2) => (B, C, bev_h, bev_W)
-                duv_dtheta = torch.sum(duv_dtheta[:, None, :, :, :].expand(-1, C, -1, -1, -1), dim=-1)
+                duv_dtheta = torch.sum(duv_dtheta[:, None, :, :, :].expand(-1, C_sat, -1, -1, -1), dim=-1)
                 dfeat_dpose_new[2,...] = duv_dtheta        
 
 

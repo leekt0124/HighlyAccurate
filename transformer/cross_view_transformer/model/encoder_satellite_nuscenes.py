@@ -386,6 +386,13 @@ class Encoder(nn.Module):
             nn.Upsample(scale_factor=4)
         )
 
+        self.pre_downsample = nn.Sequential(
+            nn.Conv2d(32, 112, (1,1), stride=1),
+        )
+        # Increase dimension to be 128 to match decoder
+        self.up_dim = nn.Conv2d(112, dim, (1,1), stride=1) 
+
+
     def forward(self, batch):
         b, n, _, _, _ = batch['image'].shape
 
@@ -395,27 +402,20 @@ class Encoder(nn.Module):
         I_inv = batch['intrinsics'].inverse()           # b n 3 3
         E_inv = batch['extrinsics'].inverse()           # b n 4 4
 
-        # print(f'image.device: {image.device}')
-        # print(f'I_inv.device: {I_inv.device}')  
-        # print(f'E_inv.device: {E_inv.device}')
-  
-
         features = [self.down(y) for y in self.backbone(self.norm(image))]
-
-        # TODO: Pass the sat_map tp backbone only...
-        # print(f'[Satellite net] features[0].shape: {features[0].shape}')
-        # return features 
-
-        # print(f'features[0].shape {features[0].shape}')
-        # print(f'features[1].shape {features[1].shape}')        
-
-
-
         feat1, feat2 = features
+        # print(f'feat1.shape {feat1.shape}') # feat1.shape torch.Size([4, 32, 320, 320])
+        # print(f'feat2.shape {feat2.shape}') # feat2.shape torch.Size([4, 112, 80, 80])
+
+        # Downsample feat1 and pass to decoder
+        feat1_downsampled = F.interpolate(self.pre_downsample(feat1), feat2.shape[-1])
+        satellite_feature = self.up_dim(feat1_downsampled + feat2)
+        # (4, 128, 80, 80)
+        return satellite_feature
+    
         # Pass (1, 112, 32, 32) feature to self.upsample
         # print(f'self.upsample(feat2).shape {self.upsample(feat2).shape}')
         satellite_feature = feat1 + self.upsample(feat2)
-
         # print(f'[Satellite feature shape] {satellite_feature.shape}')
         return satellite_feature
 

@@ -20,8 +20,8 @@ label_indices: null
 bev: 
   # h: 200
   # w: 200
-  h: 128
-  w: 128  
+  h: 256
+  w: 256  
   h_meters: 100.0
   w_meters: 100.0
   offset: 0.0
