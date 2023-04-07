@@ -625,6 +625,7 @@ class NuScenesDataset(torch.utils.data.Dataset):
         gt_shift_x = np.random.uniform(-1, 1) * self.shift_range_meters_lat / meter_per_pixel  # (pixels)
         gt_shift_y = np.random.uniform(-1, 1) * self.shift_range_meters_lon / meter_per_pixel  # (pixels)
         gt_theta = np.random.uniform(-1, 1) * self.rotation_range # (degrees)
+        # print(f'type(gt_shift_x) {type(gt_shift_x)}' <class 'torch.Tensor'>
 
         ADDING_GT_TRANSFORM = True # Set this to False if you want to check unshifted dataset
         if not ADDING_GT_TRANSFORM:
@@ -673,9 +674,9 @@ class NuScenesDataset(torch.utils.data.Dataset):
         sample_name = sample['scene'] + '-' + str(idx)
 
         return sat_map, grd_imgs, intrinsics, extrinsics, \
-               torch.tensor(-gt_shift_x, dtype=torch.float32).reshape(1), \
-               torch.tensor(gt_shift_y, dtype=torch.float32).reshape(1), \
-               torch.tensor(gt_theta, dtype=torch.float32).reshape(1), \
+               -gt_shift_x.reshape(1).clone().detach(), \
+               gt_shift_y.reshape(1).clone().detach(), \
+               torch.tensor(gt_theta, dtype=torch.float32).reshape(1).clone().detach(), \
                meter_per_pixel, \
                sample_name
                
@@ -690,8 +691,8 @@ def load_train_data(data_config, GrdImg_H, GrdImg_W, version, dataset_dir, label
         transforms.ToTensor(),
     ])
 
-    print(f'GrdImg_H: {GrdImg_H}')
-    print(f'GrdImg_W: {GrdImg_W}')    
+    # print(f'GrdImg_H: {GrdImg_H}')
+    # print(f'GrdImg_W: {GrdImg_W}')    
     
     Grd_h = GrdImg_H 
     Grd_w = GrdImg_W

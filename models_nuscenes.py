@@ -1187,34 +1187,40 @@ class LM_S2GP(nn.Module):
             headings = []
             for level in range(len(sat_feat_list)):
                 
+                sat_conf = sat_conf_list[level]
+                grd_feat = grd_feat_list[level]
+                _, _, H_grd, W_grd = grd_feat.shape
+                grd_conf = grd_conf_list[level]       
+
                 # print(f'models_nuscenes: sample_name: {sample_name}')
                 # This is a PARAMETER: which sample are we visualizing within this batch of features?
                 timestamp_idx = 0
 
                 sample_name_idx = int(sample_name[timestamp_idx].split('-')[-1])
-                SAVE_IMAGE = False
-                if sample_name_idx == 1:
-                    SAVE_IMAGE = True
+                SAVE_IMAGE = True
+                # if sample_name_idx == 1:
+                    # SAVE_IMAGE = True
 
                 sat_feat = sat_feat_list[level]
+                
                 B_sat, C_sat, H_sat, W_sat = sat_feat.shape
-
-                meter_per_pixel_feature = meter_per_pixel[0].item() * 4
+                # B, C, H, W = sat_feat.shape
+                meter_per_pixel_sat_feat = meter_per_pixel[0].item() * (self.data_dict.satellite_image.h/H_sat)
                 # Extract BEV meter_per_pixel
-                # self.data_dict.bev.h # 128
-                # self.data_dict.bev.h_meters # 100
-                meter_per_pixel_BEV = self.data_dict.bev.h_meters / self.data_dict.bev.h
-                # print("meter_per_pixel_BEV = ", meter_per_pixel_BEV)
-
-
-                H_sat_resize, W_sat_resize = math.floor(H_sat * meter_per_pixel_feature / meter_per_pixel_BEV), math.floor(W_sat * meter_per_pixel_feature / meter_per_pixel_BEV)
-                
-
-
-                sat_feat_transform = transforms.Resize(size=(H_sat_resize, W_sat_resize))
-                
+                meter_per_pixel_BEV = self.data_dict.bev.h_meters / H_grd
+                H_sat_resize, W_sat_resize = math.floor(H_sat * meter_per_pixel_sat_feat / meter_per_pixel_BEV), math.floor(W_sat * meter_per_pixel_sat_feat / meter_per_pixel_BEV)
+                # print(f'H_sat_resize: {H_sat_resize}, W_sat_resize: {W_sat_resize}')
+                # print(f'H_grd {H_grd}')
+                sat_feat_transform = transforms.Resize(size=(H_sat_resize, W_sat_resize))                
                 sat_feat_resized = sat_feat_transform(sat_feat) 
-                sat_feat_crop = TF.center_crop(sat_feat_resized, self.data_dict.bev.h)
+
+                sat_feat_transformed = sat_feat_resized.clone()
+
+                for b in range(B_sat):
+                    sat_feat_transformed[b] = TF.affine(sat_feat_resized[b], angle=heading[b].item(), translate=(0, 0), scale=1.0, shear=0)
+                    sat_feat_transformed[b] = TF.affine(sat_feat_resized[b], angle=0.0, translate=(shift_u[b].item() / meter_per_pixel_sat_feat, shift_v[b].item() / meter_per_pixel_sat_feat), scale=1.0, shear=0)
+
+                sat_feat_crop = TF.center_crop(sat_feat_transformed, H_grd)
 
 
                 # print("sat_feat.shape = ", sat_feat.shape)
@@ -1223,20 +1229,12 @@ class LM_S2GP(nn.Module):
                 # print("----------------------------------")
 
                 sat_feat = sat_feat_crop
-                sat_conf = sat_conf_list[level]
-                grd_feat = grd_feat_list[level]
-                grd_conf = grd_conf_list[level]
+
 
                 if SAVE_IMAGE:
                     # print(f'sat_feat.shape {sat_feat.shape}')
                     sat_feat_last_3_dim = sat_feat[timestamp_idx, -3:, :, :] # (3, 128, 128)
                     save_image(sat_feat_last_3_dim, f'sat_feat_iter_{iter}_{sample_name[timestamp_idx]}.png')
-
-                    # test_tensor = torch.randint_like(sat_feat_last_3_dim, low=0, high=255)
-                    # save_image(test_tensor, "test_tensor.png")
-
-                    # test2_tensor = torch.rand_like(sat_feat_last_3_dim)
-                    # save_image(test2_tensor, "test2_tensor.png")
 
                     grd_feat_last_3_dim = grd_feat[timestamp_idx, -3:, :, :]
                     save_image(grd_feat_last_3_dim, f"grd_feat_iter_{iter}_{sample_name[timestamp_idx]}.png")
