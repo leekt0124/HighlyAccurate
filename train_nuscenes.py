@@ -365,14 +365,15 @@ def train(net, lr, cfg, device, save_path, model_save_path):
     args = cfg.highlyaccurate
     print(f'resume: {args.resume}')
     print(f'epochs: {args.epochs}')
+
+    # Initialize last_model_save_path
+    last_model_save_path = model_save_path
     for epoch in range(args.resume, args.epochs):
         print(f'\n-------- Epoch {epoch}----------')
         net.train()
 
         base_lr = lr
-        base_lr = base_lr * ((1.0 - float(epoch) / 100.0) ** (1.0))
-
-        print(base_lr)
+        # base_lr = base_lr * ((1.0 - float(epoch) / 100.0) ** (1.0))
 
         optimizer = optim.Adam(net.parameters(), lr=base_lr)
         # print("Model's state_dict:")
@@ -389,10 +390,6 @@ def train(net, lr, cfg, device, save_path, model_save_path):
 
         # For v1.0-trainval: batch_size:  4 => num of batches: 7033
         # print(f'batch_size:  {args.loader.batch_size}\nnum of batches: {len(trainloader)}')
-
-
-        # Initialize last_model_save_path
-        last_model_save_path = model_save_path
 
         for Loop, Data in enumerate(trainloader, 0):
 
@@ -487,26 +484,26 @@ def train(net, lr, cfg, device, save_path, model_save_path):
                           )
 
             # Save the model every 100 loop in a single epoch
-            if Loop % 10 == 9:
-                # print('save model ...')
-                if not os.path.exists(save_path):
-                    os.makedirs(save_path)
-                old_path = last_model_save_path
+            # if Loop % 10 == 9:
+            #     # print('save model ...')
+            #     if not os.path.exists(save_path):
+            #         os.makedirs(save_path)
+            #     old_path = last_model_save_path
 
-                model_save_path_splits = model_save_path.split('_')
-                model_save_path_splits[-1] = "Loop" + str(Loop)
-                new_model_save_path = os.path.join(model_save_path_splits[0] + '_' + \
-                                                   model_save_path_splits[1] + '_' + \
-                                                   model_save_path_splits[2] + '_' + \
-                                                   model_save_path_splits[3] + '_' + \
-                                                   model_save_path_splits[4] + '_' + \
-                                                   model_save_path_splits[5] + '.pth')
-                print(f'save model ... {new_model_save_path}')
-                torch.save(net.state_dict(), new_model_save_path)
-                if os.path.exists(old_path):
-                    os.remove(old_path)
+            #     model_save_path_splits = model_save_path.split('_')
+            #     model_save_path_splits[-1] = "Loop" + str(Loop)
+            #     new_model_save_path = os.path.join(model_save_path_splits[0] + '_' + \
+            #                                        model_save_path_splits[1] + '_' + \
+            #                                        model_save_path_splits[2] + '_' + \
+            #                                        model_save_path_splits[3] + '_' + \
+            #                                        model_save_path_splits[4] + '_' + \
+            #                                        model_save_path_splits[5] + '.pth')
+            #     print(f'save model ... {new_model_save_path}')
+            #     torch.save(net.state_dict(), new_model_save_path)
+            #     if os.path.exists(old_path):
+            #         os.remove(old_path)
 
-                last_model_save_path = new_model_save_path
+            #     last_model_save_path = new_model_save_path
 
         ### save modelget_similarity_fn
         compNum = epoch % 100
@@ -514,7 +511,28 @@ def train(net, lr, cfg, device, save_path, model_save_path):
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
-        torch.save(net.state_dict(), model_save_path)
+        old_path = last_model_save_path
+
+        model_save_path_splits = model_save_path.split('_')
+        model_save_path_splits[-1] = "epoch" + str(epoch)
+        new_model_save_path = os.path.join(model_save_path_splits[0] + '_' + \
+                                            model_save_path_splits[1] + '_' + \
+                                            model_save_path_splits[2] + '_' + \
+                                            model_save_path_splits[3] + '_' + \
+                                            model_save_path_splits[4] + '_' + \
+                                            model_save_path_splits[5] + '.pth')
+        print(f'save model ... {new_model_save_path}')
+        torch.save(net.state_dict(), new_model_save_path)
+
+        print(f'try deleting old path {old_path}')
+        if os.path.exists(old_path):
+            os.remove(old_path)
+        else:
+            print(f'    old path file not exist. Cannot delete!')
+
+        last_model_save_path = new_model_save_path
+
+        # torch.save(net.state_dict(), model_save_path)
         # torch.save(net.state_dict(), os.path.join(save_path, 'model_' + str(compNum) + '.pth'))
 
         ### ranking test        
