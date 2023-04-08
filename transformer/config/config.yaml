@@ -25,7 +25,7 @@ loader:
   batch_size: 1
   num_workers: 1
   pin_memory: True
-  prefetch_factor: 2
+  prefetch_factor: 1
 
 # AdamW
 optimizer:

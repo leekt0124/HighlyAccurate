@@ -18,6 +18,8 @@ import torch.nn.functional as F
 import scipy.io as scio
 
 import ssl
+from matplotlib import pyplot as plt
+
 
 ssl._create_default_https_context = ssl._create_unverified_context  # for downloading pretrained VGG weights
 
@@ -211,7 +213,9 @@ def test1( net_test, cfg, save_path, best_rank_result, epoch, device):
             os.makedirs(save_path)
         torch.save(net_test.state_dict(), os.path.join(save_path, 'Model_best.pth'))
 
-    return result
+    ave_ratio =  np.mean(distance)/np.mean(init_dis) 
+
+    return result, ave_ratio
 
 
 def test2(net_test, args, save_path, best_rank_result, epoch,  device):
@@ -368,6 +372,10 @@ def train(net, lr, cfg, device, save_path, model_save_path):
 
     # Initialize last_model_save_path
     last_model_save_path = model_save_path
+
+    ave_ratios = []
+    epochs = []
+
     for epoch in range(args.resume, args.epochs):
         print(f'\n-------- Epoch {epoch}----------')
         net.train()
@@ -532,15 +540,39 @@ def train(net, lr, cfg, device, save_path, model_save_path):
 
         last_model_save_path = new_model_save_path
 
+
+
         # torch.save(net.state_dict(), model_save_path)
         # torch.save(net.state_dict(), os.path.join(save_path, 'model_' + str(compNum) + '.pth'))
 
         ### ranking test        
-        current = test1(net, cfg, save_path, bestRankResult, epoch, device)
+        current, ave_ratio = test1(net, cfg, save_path, bestRankResult, epoch, device)
         if (current > bestRankResult):
             bestRankResult = current
 
+        # Append (ave_ratio) for epoch #
+        ave_ratios.append(ave_ratio)
+        epochs.append(epoch)
+
         # test2(net, args, save_path, bestRankResult, epoch, device)
+    
+    # ----- Distance Ratio Plot --------- #
+    # Plot ave_ratio v.s. epoch and save figure
+    # distance: = (pred_shifts - init_shifts)
+    plt.figure(1)
+    # plt.scatter(ave_ratios, epochs)
+    plt.plot(epochs, ave_ratios)
+    plt.xlabel('epoch')
+    plt.ylabel('pred_distance/init_distance')s
+    plt.title('ratio of pred_dist/init_dis v.s. epoch')
+    plt.legend(['pred_shift_distance / init_shift_distance'])
+    plt.axis('square')
+
+    RATIO_PATH = Path.cwd()
+    print(f'RATIO_PATH: {RATIO_PATH}')
+    # save the figure
+    plt.savefig( os.path.join( str(RATIO_PATH)+ 'distance_ratio.png'), dpi=300, bbox_inches='tight')
+    plt.clf()
 
     print('Finished Training')
 
