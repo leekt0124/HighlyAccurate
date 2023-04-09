@@ -110,6 +110,10 @@ def test1( net_test, cfg, save_path, best_rank_result, epoch, device):
     end_time = time.time()
     duration = (end_time - start_time)/len(dataloader)
 
+    # pred_shifts = np.concatenate(pred_shifts, axis=0)
+    # pred_headings = np.concatenate(pred_headings, axis=0)
+    # gt_shifts = np.concatenate(gt_shifts, axis=0)
+    # gt_headings = np.concatenate(gt_headings, axis=0)
     pred_shifts = np.concatenate(pred_shifts, axis=0) * np.array([args.shift_range_lat, args.shift_range_lon]).reshape(1, 2)
     pred_headings = np.concatenate(pred_headings, axis=0) * args.rotation_range
     gt_shifts = np.concatenate(gt_shifts, axis=0) * np.array([args.shift_range_lat, args.shift_range_lon]).reshape(1, 2)

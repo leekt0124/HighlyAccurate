@@ -654,6 +654,7 @@ class LM_S2GP(nn.Module):
         self.loss_method = args.highlyaccurate.loss_method
 
         self.data_dict = args.data
+        self.loss_file = "loss.txt"
 
         self.SatFeatureNet = VGGUnet(self.level)
         self.GrdFeatureNet = VGGUnet(self.level)
@@ -1308,6 +1309,10 @@ class LM_S2GP(nn.Module):
                                                             grd_feat_new,
                                                             grd_conf_new,
                                                             dfeat_dpose_new)  # only need to compare bottom half
+                    
+                    print("shift_u_new = ", shift_u_new)
+                    print("shift_v_new = ", shift_v_new)
+                    print("heading_new = ", heading_new)
                 elif self.args.Optimizer == 'SGD':
                     r = sat_feat_proj[:, :, grd_H // 2:, :] - grd_feat[:, :, grd_H // 2:, :]
                     p = torch.mean(torch.abs(r), dim=[1, 2, 3])  # *100 #* 256 * 256 * 3
@@ -1414,6 +1419,9 @@ class LM_S2GP(nn.Module):
                             self.args.coe_shift_lat, self.args.coe_shift_lon, coe_heading,
                             self.args.coe_L1, self.args.coe_L2, self.args.coe_L3, self.args.coe_L4)
 
+            print("loss = ", loss)
+            with open(self.loss_file, 'a') as f:
+                f.write(f'{loss}\n')
             return loss, loss_decrease, shift_lat_decrease, shift_lon_decrease, thetas_decrease, loss_last, \
                        shift_lat_last, shift_lon_last, theta_last, \
                        L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list
@@ -1447,6 +1455,9 @@ class LM_S2GP(nn.Module):
         shift_u = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
         shift_v = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
         heading = torch.zeros([B, 1], dtype=torch.float32, requires_grad=True, device=sat_map.device)
+
+        # shift_u = shift_u * self.args.shift_range_lon / meter_per_pixel[0]
+        # shift_v = shift_v * self.args.shift_range_lon / meter_per_pixel[0]
 
         gt_uv_dict = {}
         gt_feat_dict = {}
