@@ -553,6 +553,9 @@ def train(net, lr, cfg, device, save_path, model_save_path):
         # Append (ave_ratio) for epoch #
         ave_ratios.append(ave_ratio)
         epochs.append(epoch)
+        ratio_txt_file = os.path.join(Path.cwd(), 'distance_ratio.txt')
+        with open(ratio_txt_file, 'a') as f:
+                        f.write(f'{ave_ratio}\n') 
 
         # test2(net, args, save_path, bestRankResult, epoch, device)
     
@@ -563,17 +566,21 @@ def train(net, lr, cfg, device, save_path, model_save_path):
     # plt.scatter(ave_ratios, epochs)
     plt.plot(epochs, ave_ratios)
     plt.xlabel('epoch')
-    plt.ylabel('pred_distance/init_distance')s
+    plt.ylabel('pred_distance/init_distance')
     plt.title('ratio of pred_dist/init_dis v.s. epoch')
     plt.legend(['pred_shift_distance / init_shift_distance'])
-    plt.axis('square')
+    plt.ylim([0, 10])
+    # plt.axis('square')
 
     RATIO_PATH = Path.cwd()
     print(f'RATIO_PATH: {RATIO_PATH}')
     # save the figure
-    plt.savefig( os.path.join( str(RATIO_PATH)+ 'distance_ratio.png'), dpi=300, bbox_inches='tight')
+    plt.savefig( os.path.join(str(RATIO_PATH), 'distance_ratio.png'), dpi=300, bbox_inches='tight')
     plt.clf()
 
+    # Save ave_ratio vs epoch
+    scio.savemat(os.path.join(str(RATIO_PATH), 'distance_ratio.mat'), {'ave_ratios': ave_ratios, 'epochs': epochs})
+      
     print('Finished Training')
 
 

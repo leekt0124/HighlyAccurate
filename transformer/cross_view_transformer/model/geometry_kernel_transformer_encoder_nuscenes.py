@@ -208,7 +208,8 @@ def bev2image_sampling(points, I, E, height, width):
         I: (b, n, 3, 3)
         E: (b, n, 4, 4)
     Return:
-        sampled points: (k, 6, 2)
+        sampled points: (k, 6, 2) 
+        For each grid on the bev (x,y,z) in world -> k points on 6 ground-images, each (u,v)
     """
     # (k, 3) -> (k, 4)
     k = points.shape[0]
@@ -241,9 +242,25 @@ def bev2image_sampling(points, I, E, height, width):
 
     return sample_points, mask
 
-
+"""
+Look-up table (LUT) indexing:  get rid of camera calibrated parameters at runtime.
+"""
 class IndexBEVProjector(nn.Module):
     """GridBEVProjector, based on Grid Sampling (nearest)
+    self.grid_offsets: a meshgrid of 2D indices
+    image_size: (224, 480)
+    grid_size:  (7, 1)     (The author uses a 7x1 kernel for convolution!)
+    x: [0]
+    y: [0, 1, 2, 3, 4, 5, 6] - 3 => [-3, -2, -1, 0, 1, 2, 3]
+    meshgrid: ([[0],[0],[0],[0],[0],[0],[0]] ,
+                [[-3],[-2],[-1], [0], [1], [2], [3]] )
+            A tuple (x, y )
+            x(7,1), y(7,1)
+
+    stack: ((x,y)) stack a tuple of 2 (7,1) tensors => a tensor of shape (2,7,1)
+    Permute(1,2,0) => offsets = (7,1,2)
+    [ [[0,-3]], [[0,-2]], ..., [[0,3]]]
+
     """
 
     def __init__(self, image_size, grid_size=(3, 3), height=-1.0):
@@ -251,9 +268,9 @@ class IndexBEVProjector(nn.Module):
         self.image_size = image_size
         self.grid_size = grid_size
         grid_h, grid_w = grid_size
-        y = torch.arange(grid_h) - grid_h // 2
-        x = torch.arange(grid_w) - grid_w // 2
-        offsets = torch.stack(torch.meshgrid(
+        y = torch.arange(grid_h) - grid_h // 2  # [-grid_h/2, -grid_h/2+1, ..., grid_h/2]
+        x = torch.arange(grid_w) - grid_w // 2  # [-grid_w/2, -grid_w/2+1, ..., grid_w/2]
+        offsets = torch.stack(torch.meshgrid(        # offsets = [ [-gw/2, -gh/2], [-gw/2, -gh/2+1],... [gw/2, gh/2]]
             x, y, indexing="xy")).permute(1, 2, 0)
         self.register_buffer("grid_offsets", offsets, persistent=False)
         self.bev_height = height
@@ -273,16 +290,18 @@ class IndexBEVProjector(nn.Module):
         # bev_grids -> image_coords
         # (3, H, W) -> (H*W, 3), k=H*W
         bev_points = bev_grids.reshape(3, -1).transpose(0, 1)
-        bev_points[:, -1] = self.bev_height
+        bev_points[:, -1] = self.bev_height # Pre-defined height for all grids
 
         # (b, n, k, 2), (b, n, k, 1)
         sample_points, sample_mask = bev2image_sampling(
             bev_points, I, E, self.image_size[0], self.image_size[1])
-        num_grid_points = self.grid_size[0] * self.grid_size[1]
+        num_grid_points = self.grid_size[0] * self.grid_size[1] # (7*1) => 7 points!
         sample_points[..., 0] *= w
         sample_points[..., 1] *= h
         sample_points = sample_points.round().long()
-        grid_offsets = self.grid_offsets.view(1, 1, 1, num_grid_points, 2)
+        grid_offsets = self.grid_offsets.view(1, 1, 1, num_grid_points, 2) 
+
+        print(f'grid_offsets.shape {grid_offsets.shape}') # (1,1,1,7,2)
 
         # [b, n, k, 9, 2]
         sample_points = sample_points.unsqueeze(-2) + grid_offsets
@@ -291,7 +310,7 @@ class IndexBEVProjector(nn.Module):
         sample_points[..., 1].clamp_(min=0, max=h-1)
         # [b, n, k, 9]
         k = sample_points.shape[2]
-        sample_points_inds = sample_points[..., 0] + sample_points[..., 1] * w
+        sample_points_inds = sample_points[..., 0] + sample_points[..., 1] * w # indices in 1-d
         # [b*n, k*9]
         sample_points_inds = sample_points_inds.view(
             b * n, k * num_grid_points)
@@ -305,6 +324,9 @@ class IndexBEVProjector(nn.Module):
         sample_feats = images[sample_points_inds].reshape(
             b, n, k, num_grid_points, c)
         # embed()
+        print(f'sample_points_inds {sample_points_inds}')
+        print(f'sample_feats.shape {sample_feats.shape}')     
+           
         return sample_feats, sample_mask.detach()
 
 
@@ -501,13 +523,18 @@ class GeometryKernelAttention(nn.Module):
         feature_embed, mask = self.sampling(
             bev.grid.detach().clone(), feature_embed, I_, E_)
 
+        print(f'After IndexSampling:\nfeature_embed.shape {feature_embed.shape}\nmask.shape {mask.shape}')
         # b, n, q, num_points, c
         feature_flat = feature_embed[..., :d_feature]
         d_flat = feature_embed[..., d_feature:]
 
+        print(f'feature_flat.shape {feature_flat.shape}')
+        print(f'd_flat.shape {d_flat.shape}')
         # (b n) q, num_points, 4
         d_embed = self.img_embed(d_flat)
 
+        print(f'd_embed.shape {d_embed.shape}')
+        print(f'c_embed.shape {c_embed.shape}')
         # d_embed: b, n, q, num_points, d
         # c_embed: (b, n), d, 1, 1
         img_embed = d_embed - c_embed.view(b, n, 1, 1, d_embed.shape[-1])
@@ -516,6 +543,8 @@ class GeometryKernelAttention(nn.Module):
         # g: num_grid_points
         # b, n, q, g, c
         if self.feature_proj is not None:
+            print(f'img_embed.shape {img_embed.shape}')
+            print(f' self.feature_proj(feature_flat).shape { self.feature_proj(feature_flat).shape}')
             key_flat = img_embed + self.feature_proj(feature_flat)
         else:
             # (b, n) d, h, w
@@ -524,8 +553,13 @@ class GeometryKernelAttention(nn.Module):
         # (b, n) d, h, w
         val_flat = self.feature_linear(feature_flat)
 
+        print(f'key_flat.shape {key_flat.shape}')
+        print(f'val_flat.shape (bev prior) {val_flat.shape}')
+
         # Expand + refine the BEV embedding
         # b, n, d, H, W
+        print(f'query_pos.shape {query_pos.shape}')
+        print(f'x.shape (bev prior) {x.shape}')
         query = query_pos + x[:, None]
 
         return self.cross_attn(query, key_flat, val_flat, mask=mask, skip=x if self.skip else None)

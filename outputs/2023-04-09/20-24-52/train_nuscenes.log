@@ -1,0 +1,2 @@
+[2023-04-09 20:24:56,524][torch.distributed.nn.jit.instantiator][INFO] - Created a temporary directory at /tmp/tmpikjs1op2
+[2023-04-09 20:24:56,525][torch.distributed.nn.jit.instantiator][INFO] - Writing /tmp/tmpikjs1op2/_remote_module_non_sriptable.py

@@ -1,11 +1,107 @@
-# New content from leekt
+# End-to-end localization with satellite imagery using geometry guided kernel transformer (GKT)
+
+## How to run this probject
+- It is recommended to run this repository within a docker container. The instructions for how to run this repository is written below.
+
 ### Docker command
 1. Enter the docker folder `cd docker`
-2. Build docker image: `docker build --tag satellite_slam/pytorch_env .`
-3. Build docker environment: `chmod +x build_docker_container.sh && ./build_docker_container.sh satellite_slam`. Please enter `exit` once entering the container, we will rerun it below to be consistent.
-4. Start existing docker: `docker start satellite_slam`
-5. Execute the container: `docker exec -it -u root satellite_slam bash` 
+2. Build docker image: `docker build --tag satellite_slam_gkt/pytorch_env .`
+3. Build docker environment: `chmod +x build_docker_container.sh && ./build_docker_container.sh satellite_slam_gkt`. Please enter `exit` once entering the container, we will rerun it below to be consistent.
+4. Start existing docker: `docker start satellite_slam_gkt`
+5. Execute the container: `docker exec -it -u root satellite_slam_gkt bash` 
 6. You should be albe to develop inside the container
+
+## Train the model with NuScenes dataset:
+
+### Setup parameters
+First, you need to configure some parameters.
+Go to the config file in `HighlyAccurate/transformer/config`.
+You will see the following folder structure:
+
+```
+data/
+experiment/
+highlyaccurate/
+loss/
+metrics/
+model/
+satellite_model/
+visualization/
+config.yaml
+```
+The `hydra` tool will take parameters specified in `config.yaml` and pass them to the python scripts.
+Inside `config.yaml`, you can trace other parameters b
+For example,
+```
+defaults:
+  - _self_
+  - model: gkt_nuscenes
+  - satellite_model: cvt_satellite_nuscenes
+  - data: nuscenes_vehicle
+  - visualization: null
+
+  - loss: default_loss        # Default: use ... /config/loss/default_loss.yaml
+  - metrics: default_metrics  # Default: use ... /config/metrics/default_metrics.yaml
+
+  - highlyaccurate: default_highlyacc
+```
+This means that parameters under **model** are configured by the file named `gkt_nuscenes.yaml` under `model/` folder. Parameters under **data** are configured by the file `nuscenes_vehicle.yaml` under `dtat/` folder, and so on.
+
+Parameters you are highly recommended to play around with are:
+1. `highlyaccurate/default_highlyacc.yaml` : `date`        : today's date in string (e.g. "0409")
+                                             `epochs`      : number of epochs
+                                             `lr`          : learning rate
+                                             `dataset_dir` : absolute path from root to where you stored `nuscenes`
+                                                       e.g.: "/mnt/workspace/datasets/nuScene_dataset/media/datasets/nuscenes"
+                                             `root_dir`    : absolute path from root to where you stored `satmap/` and `samples/`
+                                                       e.g.: "/mnt/workspace/datasets/nuScene_dataset/" # satmap/ or samples                                             
+2. `config.yaml` 
+              `loader`:
+                `batch_size`: 1        Number of samples(set of images) you want to load per batch
+                `num_workers`: 1       Number of (GPU) threads you want to launch   
+3. `data/nuscenes.yaml`:
+              `version`: 'v1.0-mini' or 'v1.0-trainval'
+    
+
+### Run the training script: 
+1. Enter a docker container 
+2. `cd HighlyAccurate/`
+3. `python train_nuscenes.py`
+The model would start training.
+
+
+## Folder structure explanation:
+1. `dataLoader`: everything related to data loading. (`nuscenes_dataset.py`)
+2. `docker`    : everything related to docker.
+3. `ModelsNuscenes` : stores pre-trained model weights.
+4. `outputs`        : stores the output from model training/testing.
+5. `transformer`    : everything related to transformer and `config/`.
+6. `HighlyAccurate` : `models_nuscenes.py` and `train_nuscens.py` are the main two scripts for project development.
+
+```
+HighlyAccurate/
+  - dataLoacer/
+  - docker/
+  - ModelsNuscenes/
+  - outputs
+  - transformer/
+    - config/
+      - data/
+      - highlyaccurate/
+      - model/
+      ...
+      config.yaml
+    - cross_view_transformer/
+      - model/
+        cvt.py
+        geometry_kernel_transformer_encoder_nuscenes.py
+  - models_nuscenes.py
+  - plot_ratio.py
+  - train_nusenes.py
+  - README.md
+
+```
+
 
 ### Run KITTI-360 dataset:
 Train: `python train_kitti_360.py --batch_size 1 --train_damping 0 --using_weight 0`  
