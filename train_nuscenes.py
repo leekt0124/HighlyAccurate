@@ -128,7 +128,7 @@ def localize( net_localize, cfg, save_path, best_rank_result, epoch, device):
     # Batch size 1, iterate for 40 loop
     for i, data in enumerate(dataloader, 0):
 
-        if i >= 40:
+        if i >= 5:
             # import sys
             # sys.exit()
             print(f' Done epoch {epoch}')
@@ -164,32 +164,19 @@ def localize( net_localize, cfg, save_path, best_rank_result, epoch, device):
         gt_headings.append(gt_heading.data.cpu().numpy())        
 
         # print(f'pred shifts {shifts.data.cpu().numpy()}')
+
+         # ----------- Save pred_lat/lon and gt_lat/lon for plotting trajectories --------- # 
         x = shifts.data.cpu().numpy()[0,0] * meter_per_pixel
         y = shifts.data.cpu().numpy()[0,1] * meter_per_pixel
         pred_lat, pred_lon = meter2latlon(origin[0], origin[1], x, y)
-        pred_lats.append(pred_lat.data.cpu().numpy())
-        pred_lons.append(pred_lon.data.cpu().numpy())
+        print(f'pred_lat.dtype {pred_lat.dtype}')
+        pred_lats.append(pred_lat[0].data.cpu().numpy())
+        print(f'pred_lats[-1].dtype {pred_lats[-1].dtype}')
+        pred_lons.append(pred_lon[0].data.cpu().numpy())
 
-        print(f'pred lat,lon: {pred_lat[0]},{pred_lon[0]}  gt lat,lon:  {lat[0]},{lon[0]}')
+        print(f'pred lat,lon: {pred_lats[-1]},{pred_lons[-1]}  gt lat,lon:  {lat[0]},{lon[0]}')
         gt_lats.append(lat.data.cpu().numpy())
         gt_lons.append(lon.data.cpu().numpy())    
-
-    # pred_shifts = torch.FloatTensor(pred_shifts)
-    # gt_shifts = torch.FloatTensor(gt_shifts)
-
-
-
-    # plt.figure(2)
-    # plt.scatter(lonlons)
-    # plt.xlabel('longitude values')
-    # plt.ylabel('latitude values')
-    # plt.title('lats/lons values')
-    # plt.legend(['ego_poses'])
-    # plt.axis('square')
-    # # save the figure
-    # plt.savefig( os.path.join(TRAJ_IMG_PATH+'ego_poses(latlon)-' + scene_name + '.png'), dpi=300, bbox_inches='tight')
-    # plt.clf()    
-
 
     end_time = time.time()
     duration = (end_time - start_time)/len(dataloader)
@@ -198,28 +185,37 @@ def localize( net_localize, cfg, save_path, best_rank_result, epoch, device):
     pred_headings = np.concatenate(pred_headings, axis=0) * args.rotation_range
     gt_shifts = np.concatenate(gt_shifts, axis=0) * np.array([args.shift_range_lat, args.shift_range_lon]).reshape(1, 2)
     gt_headings = np.concatenate(gt_headings, axis=0) * args.rotation_range
-       
 
-    pred_lats = np.asarray(pred_lats)
-    pred_lons = np.asarray(pred_lons)
+    # ----------- Plot trajectories --------- # 
+    print(pred_lats)
+    print(pred_lons)
+    # pred_lats = np.asarray(pred_lats)
+    # pred_lons = np.asarray(pred_lons)
     gt_lats = np.concatenate(gt_lats, axis=0) 
     gt_lons = np.concatenate(gt_lons, axis=0)
 
     # plot (pred_lat/lon vs gt_lat/lon)
     # Plot the 2D trajectories for this scene
     plt.figure(1)
-    # plt.plot(pred_shifts[:,1], pred_shifts[:,0])
     plt.plot(pred_lats, pred_lons)
-    plt.plot(gt_lats, gt_lons)
+    # plt.plot(gt_lats, gt_lons)
     plt.xlabel('lon')
     plt.ylabel('lat')
-    plt.title('Predicted v.s. Ground Truth Shifts lat/lon')
+    # plt.title('Predicted v.s. Ground Truth Shifts lat/lon')
     # plt.legend(['pred'])
     plt.legend(['pred', 'ground truth'])
     plt.axis('square')
     # save the figure
-    plt.savefig( os.path.join(Path.cwd(), 'localized-trajectory.png'), dpi=300, bbox_inches='tight')
-    plt.clf()
+    plt.savefig( os.path.join(Path.cwd(), 'localized-trajectory.png')) #, dpi=300, bbox_inches='tight')
+    # plt.clf()
+
+    plt.figure(2)
+    plt.plot(gt_lats, gt_lons)
+    plt.xlabel('lon')
+    plt.ylabel('lat')
+    plt.legend(['ground truth'])
+    plt.axis('square')
+    plt.savefig( os.path.join(Path.cwd(), 'gt-trajectory.png')) #, dpi=300, bbox_inches='tight')
 
 
     # print(f'gt_shifts.shape {gt_shifts.shape}')     # (200, 2)
