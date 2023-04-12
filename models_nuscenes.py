@@ -18,6 +18,8 @@ from RNNs import NNrefine
 
 import math
 
+from torchviz import make_dot
+
 EPS = utils.EPS
 
 
@@ -659,6 +661,8 @@ class LM_S2GP(nn.Module):
         self.SatFeatureNet = VGGUnet(self.level)
         self.GrdFeatureNet = VGGUnet(self.level)
 
+        self.counts = 0
+
         print("Debug msg")
         if args.highlyaccurate.use_transformer == True:
             print("For Ground-View images, Use Transformer as Feature Extractor!")
@@ -903,6 +907,125 @@ class LM_S2GP(nn.Module):
                      # sat_c is None by default
         return sat_f_trans, sat_c_trans, new_jac, uv * mask[:, :, :, None], mask
 
+    def clamp_pi_tensor(self, data: torch.tensor):
+        data = torch.where(data > torch.pi, data - 2 * torch.pi, data)
+        data = torch.where(data < -torch.pi, data + 2 * torch.pi, data)
+        return data
+
+    def cal_jacobian(self, data: torch.tensor):
+        # --- coord notation --- #
+        # u point to right, v point to down
+        # x point to right, y point to up
+        EPS = 1e-12
+        DEVICE = data.device
+
+        B, C, H, W = data.shape
+
+        mask = (data < EPS) & (data > -EPS)
+
+        shiftu = F.pad(data[:, :, :, :-1], (1, 0), "constant", 0)
+        shiftv = F.pad(data[:, :, :-1], (0, 0, 1, 0), "constant", 0)
+        # shiftu.requires_grad = True
+        # shiftv.requires_grad = True
+        print("shiftu.requires_grad = ", shiftu.requires_grad)
+
+        mask_shiftu = (shiftu < EPS) & (shiftu > -EPS)
+        mask_shiftv = (shiftv < EPS) & (shiftv > -EPS)
+
+        jac_u = shiftu - data
+        jac_u[:, :, :, 0] = 0
+        jac_u[mask] = 0
+        jac_u[mask_shiftu] = 0
+
+        jac_v = shiftv - data
+        jac_v[:, :, 0, :] = 0
+        jac_v[mask] = 0
+        jac_v[mask_shiftv] = 0
+
+        h = torch.arange(start=(H - 1) / 2.0, end=-(H - 1) / 2.0 - 1, step=-1)
+        w = torch.arange(start=-(W - 1) / 2.0, end=(W - 1) / 2.0 + 1, step=1)
+        grid_h, grid_w = torch.meshgrid(h, w, indexing='ij')
+        grid_h.to(device=DEVICE)
+        grid_w.to(device=DEVICE)
+        grid = torch.stack((grid_h, grid_w), dim=-1) # (10, 10, 2)
+        grid = grid.view(1, 1, H * W, 2, 1).repeat(B, C, 1, 1, 1) # (B, C, (HW), 2, 1)
+        grid_dist = torch.sqrt(torch.sum(torch.square(grid), dim=-2)).view(B, C, H, W).to(device=DEVICE) # (B, C, H, W)
+
+        theta = torch.atan2(grid_h, grid_w).to(device=DEVICE) # (H, W)
+        theta = theta.view(1, 1, H * W).repeat(B, C, 1) # (B, C, (HW))
+        dR_dtheta = theta + torch.pi / 2
+        dR_dtheta = dR_dtheta.view(B, C, H, W)
+        dR_dtheta = self.clamp_pi_tensor(dR_dtheta)
+        dR_dtheta_x = grid_dist * torch.cos(dR_dtheta)
+        dR_dtheta_y = grid_dist * torch.sin(dR_dtheta) # (B, C, H, W)
+
+        jac_theta = dR_dtheta_x * jac_u + dR_dtheta_y * (-jac_v)
+
+        # Not sure (leekt)
+        jac_theta = jac_theta * 2 * torch.pi / 180 # Account for unit
+
+        jac = torch.stack((jac_u, jac_v, jac_theta), dim=0) # (3, B, C, H, W)
+
+        return jac_u, jac_v, jac_theta, jac
+
+    def LM_update_2D(self, learned_u, learned_v, learned_theta, F_bev, F_s2bev, jac):
+        '''
+        Args:
+            learned_u: [B, 1]
+            learned_v: [B, 1]
+            learned_theta: [B, 1]
+            F_bev: [B, C, H, W]
+            F_s2bev: [B, C, H, W]
+            jac: [3, B, C, H, W]
+        '''
+        DEVICE = F_bev.device
+        DAMPING = 0.1
+
+        # print("F_s2bev = ", F_s2bev)
+
+        B, C, H, W = F_bev.shape
+
+        F_bev = F_bev.reshape(B, -1) # (B, (CHW))
+        F_s2bev = F_s2bev.reshape(B, -1) # (B, (CHW))
+
+        # Default to be False
+        NORMALIZE = False
+        if NORMALIZE:
+            F_bev_norm = torch.norm(F_bev, p=2, dim=-1) # (B, )
+            F_bev_norm = torch.maximum(F_bev_norm, 1e-6 * torch.ones_like(F_bev_norm))
+            F_bev = F_bev / F_bev_norm.view(B, 1)
+
+            F_s2bev_norm = torch.norm(F_s2bev, p=2, dim=-1) # (B, )
+            F_s2bev_norm = torch.maximum(F_s2bev_norm, 1e-6 * torch.ones_like(F_s2bev_norm))
+            F_s2bev = F_s2bev / F_s2bev_norm.view(B, 1)
+
+            # jac = jac / F_s2bev_norm.view(1, B, 1, 1, 1)
+
+        e = F_bev - F_s2bev # (B, (CHW))
+
+        J = jac.view(3, B, C * H * W) # (3, B, (CHW))
+        J = J.permute(1, 2, 0) # (B, (CHW), 3)
+        J_transpose = J.permute(0, 2, 1) # (B, 3, (CHW))
+        Hessian = J_transpose @ J # (B, 3, 3)
+        diag_Hessian = torch.eye(Hessian.shape[-1], requires_grad=True).to(device=DEVICE)
+        delta_pose = torch.inverse(Hessian + diag_Hessian * DAMPING) @ J_transpose @ e.view(B, C * H * W, 1) # (B, 3, 1)
+
+        # print("delta_pose = ", delta_pose)
+        learned_u_new = learned_u + delta_pose[:, 0, 0] # (B, )
+        learned_v_new = learned_v + delta_pose[:, 1, 0]
+        learned_theta_new = learned_theta + delta_pose[:, 2, 0]
+
+        # Debug (leekt): Avoid large value
+        rand_u = torch.distributions.uniform.Uniform(-1, 1).sample([B, 1]).to(device=DEVICE)
+        rand_v = torch.distributions.uniform.Uniform(-1, 1).sample([B, 1]).to(device=DEVICE)
+        rand_u.requires_grad = True
+        rand_v.requires_grad = True
+        learned_u_new = torch.where((learned_u_new > -2.5) & (learned_u_new < 2.5), learned_u_new, rand_u)
+        learned_v_new = torch.where((learned_v_new > -2.5) & (learned_v_new < 2.5), learned_v_new, rand_v)
+
+        return learned_u_new, learned_v_new, learned_theta_new
+
+
     def LM_update(self, shift_u, shift_v, theta, sat_feat_proj, sat_conf_proj, grd_feat, grd_conf, dfeat_dpose):
         '''
         Args:
@@ -1019,7 +1142,7 @@ class LM_S2GP(nn.Module):
 
         return shift_u_new, shift_v_new, theta_new
 
-    def NN_update(self, shift_u, shift_v, theta, sat_feat_proj, sat_conf_proj, grd_feat, grd_conf, dfeat_dpose):
+    def NN_update(self, shift_u, shift_v, theta, sat_feat_proj, sat_conf_proj, grd_feat, grd_conf, eat_dpose):
 
         delta = self.NNrefine(sat_feat_proj, grd_feat)  # [B, 3]
         # print('=======================')
@@ -1182,6 +1305,9 @@ class LM_S2GP(nn.Module):
         shift_us_all = []
         shift_vs_all = []
         headings_all = []
+
+        self.counts += 1
+
         for iter in range(self.N_iters):
             shift_us = []
             shift_vs = []
@@ -1189,7 +1315,7 @@ class LM_S2GP(nn.Module):
             for level in range(len(sat_feat_list)):
                 
                 sat_conf = sat_conf_list[level]
-                grd_feat = grd_feat_list[level]
+                grd_feat = grd_feat_list[level] # (1, 10, 128, 128)
                 _, _, H_grd, W_grd = grd_feat.shape
                 grd_conf = grd_conf_list[level]       
 
@@ -1199,23 +1325,25 @@ class LM_S2GP(nn.Module):
 
                 sample_name_idx = int(sample_name[timestamp_idx].split('-')[-1])
                 SAVE_IMAGE = True
-                # if sample_name_idx == 1:
-                    # SAVE_IMAGE = True
 
-                sat_feat = sat_feat_list[level]
+                sat_feat = sat_feat_list[level] # (1, 10, 320, 320)
                 
                 B_sat, C_sat, H_sat, W_sat = sat_feat.shape
                 # B, C, H, W = sat_feat.shape
                 meter_per_pixel_sat_feat = meter_per_pixel[0].item() * (self.data_dict.satellite_image.h/H_sat)
                 # Extract BEV meter_per_pixel
-                meter_per_pixel_BEV = self.data_dict.bev.h_meters / H_grd
+                meter_per_pixel_BEV = self.data_dict.bev.h_meters / H_grd # (100 / 128)
                 H_sat_resize, W_sat_resize = math.floor(H_sat * meter_per_pixel_sat_feat / meter_per_pixel_BEV), math.floor(W_sat * meter_per_pixel_sat_feat / meter_per_pixel_BEV)
-                # print(f'H_sat_resize: {H_sat_resize}, W_sat_resize: {W_sat_resize}')
-                # print(f'H_grd {H_grd}')
+
+                # print("H_grd = ", H_grd) # (100)
+                # print("H_sat = ", H_sat) # (320)
+                # print("H_sat_resize = ", H_sat_resize) # (489)
+
                 sat_feat_transform = transforms.Resize(size=(H_sat_resize, W_sat_resize))                
                 sat_feat_resized = sat_feat_transform(sat_feat) 
 
                 sat_feat_transformed = sat_feat_resized.clone()
+                # sat_feat_transformed.requires_grad = True
 
                 for b in range(B_sat):
                     sat_feat_transformed[b] = TF.affine(sat_feat_resized[b], angle=heading[b].item(), translate=(0, 0), scale=1.0, shear=0)
@@ -1232,15 +1360,15 @@ class LM_S2GP(nn.Module):
                 sat_feat = sat_feat_crop
 
 
-                if SAVE_IMAGE:
+                if iter == 0 and SAVE_IMAGE and self.counts % 10 == 1:
+                    print("self.counts = ", self.counts)
                     # print(f'sat_feat.shape {sat_feat.shape}')
                     sat_feat_last_3_dim = sat_feat[timestamp_idx, -3:, :, :] # (3, 128, 128)
-                    save_image(sat_feat_last_3_dim, f'sat_feat_iter_{iter}_{sample_name[timestamp_idx]}.png')
+                    save_image(sat_feat_last_3_dim, f'sat_feat_iter_{self.counts}_{sample_name[timestamp_idx]}.png')
 
                     grd_feat_last_3_dim = grd_feat[timestamp_idx, -3:, :, :]
-                    save_image(grd_feat_last_3_dim, f"grd_feat_iter_{iter}_{sample_name[timestamp_idx]}.png")
+                    save_image(grd_feat_last_3_dim, f"grd_feat_iter_{self.counts}_{sample_name[timestamp_idx]}.png")
 
-                grd_H, grd_W = grd_feat.shape[-2:]
                 sat_feat_proj = sat_feat      
 
                 small_const = 0.1
@@ -1253,66 +1381,77 @@ class LM_S2GP(nn.Module):
                 grd_conf_new = grd_conf
 
                 # ------------- Partial Derivative of Features w.r.t. Pose(shift_u, shift_v, theta) for LM Optimization ------------- #
-                dfeat_dpose_new = torch.ones([3, B, C, self.data_dict.bev.h, self.data_dict.bev.h], device=shift_u.device) #dfeat_dpose               
-                # dfeat_dpose_new = torch.ones([3, B, C, H, W], device=shift_u.device) #dfeat_dpose    
+                jac_u, jac_v, jac_theta, dfeat_dpose_new = self.cal_jacobian(sat_feat_new)
 
-                sat_feat_shiftu = F.pad(sat_feat[:, :, :, 1:], (0,1), "constant", 0)
-                dfeat_dpose_new[0,...] = sat_feat_shiftu - sat_feat 
-                sat_feat_shiftv = F.pad(sat_feat[:, :, 1:, :], (0,0,0,1), "constant", 0)
-                dfeat_dpose_new[1,...] = sat_feat_shiftv - sat_feat                 
+                # shift_u_new, shift_v_new, heading_new = self.LM_update_2D(shift_u, shift_v, heading, grd_feat_new, sat_feat_new, dfeat_dpose_new)
+
+                # dfeat_dpose_new = torch.ones([3, B, C, self.data_dict.bev.h, self.data_dict.bev.h], device=shift_u.device) #dfeat_dpose               
                 
-                '''
-                    dR_dtheta       (B, 3, 3)
-                    xyz_bev:        (1, bev_h, bev_w, 3)
-                    Tbev2sat:       (B, 3)
-                    R_bev2sat:      (2, 3)
-                    dxyz_dtheta:    (B, bev_h, bev_w, 3)
-                    meter_per_pixel:(B)
-                    duv_dtheta:     (B, C, bev_h, bev_w)
-                '''                   
-                cos = torch.cos(heading)        # (B,) where B = 4(batch size)
-                sin = torch.sin(heading)        # (B,)
-                zeros = torch.zeros_like(cos)   # (B,)
-                dR_dtheta = self.args.rotation_range / 180 * np.pi * \
-                            torch.cat([-sin, zeros, -cos, zeros, zeros, zeros, cos, zeros, -sin], dim=-1)  # shape = [B, 9]
-                dR_dtheta = dR_dtheta.view(B, 3, 3)      
+                # sat_feat_shiftu = F.pad(sat_feat[:, :, :, 1:], (0,1), "constant", 0)
+                # dfeat_dpose_new[0,...] = sat_feat_shiftu - sat_feat 
+                # sat_feat_shiftv = F.pad(sat_feat[:, :, 1:, :], (0,0,0,1), "constant", 0)
+                # dfeat_dpose_new[1,...] = sat_feat_shiftv - sat_feat                 
+                
+                # '''
+                #     dR_dtheta       (B, 3, 3)
+                #     xyz_bev:        (1, bev_h, bev_w, 3)
+                #     Tbev2sat:       (B, 3)
+                #     R_bev2sat:      (2, 3)
+                #     dxyz_dtheta:    (B, bev_h, bev_w, 3)
+                #     meter_per_pixel:(B)
+                #     duv_dtheta:     (B, C, bev_h, bev_w)
+                # '''                   
+                # cos = torch.cos(heading)        # (B,) where B = 4(batch size)
+                # sin = torch.sin(heading)        # (B,)
+                # zeros = torch.zeros_like(cos)   # (B,)
 
-                # Need: xyz_bev, Tbev2sat, R_bev2sat(bev2sat)
-                _, _, bev_H, bev_W = grd_feat.shape
-                v, u = torch.meshgrid(torch.arange(0, bev_H, dtype=torch.float32, device=dR_dtheta.device),
-                                      torch.arange(0, bev_W, dtype=torch.float32, device=dR_dtheta.device))
-                xyz_bev = torch.stack([u, v, torch.ones_like(u)], dim=-1).unsqueeze(dim=0)  # [1, grd_H, grd_W, 3]                
-                camera_height = utils.get_camera_height()
-                # camera offset, shift[0]:east,Z, shift[1]:north,X
-                height = camera_height * torch.ones_like(shift_u[:, :1])                
-                Tbev2sat = torch.cat([shift_v, height, -shift_u], dim=-1)  # shape = [B, 3]
-                R_bev2sat = torch.tensor([0, 0, 1, 1, 0, 0], \
-                            dtype=torch.float32, device=dR_dtheta.device, requires_grad=True).reshape(2, 3)
+                # # dR_dtheta = self.args.rotation_range / 180 * np.pi * torch.cat([-sin, -cos, cos, -sin], dim=-1)
+                # # dR_dtheta = dR_dtheta.view(B, 1, 2, 2)
+                # # print("dR_dtheta.shape = ", dR_dtheta.shape)
+                # # print("sat_feat.shape = ", sat_feat.shape)
+                # # dfeat_dpose_new[2] = dR_dtheta @ sat_feat
+                # dR_dtheta = self.args.rotation_range / 180 * np.pi * \
+                #             torch.cat([-sin, zeros, -cos, zeros, zeros, zeros, cos, zeros, -sin], dim=-1)  # shape = [B, 9]
+                # dR_dtheta = dR_dtheta.view(B, 3, 3)      
 
-                dxyz_dtheta = torch.sum(dR_dtheta[:, None, None, :, :] * xyz_bev[:, :, :, None, :], dim=-1) + \
-                              torch.sum(-dR_dtheta * Tbev2sat[:, None, :], dim=-1)[:, None, None, :]
+                # # Need: xyz_bev, Tbev2sat, R_bev2sat(bev2sat)
+                # _, _, bev_H, bev_W = grd_feat.shape
+                # v, u = torch.meshgrid(torch.arange(0, bev_H, dtype=torch.float32, device=dR_dtheta.device),
+                #                       torch.arange(0, bev_W, dtype=torch.float32, device=dR_dtheta.device))
+                # xyz_bev = torch.stack([u, v, torch.ones_like(u)], dim=-1).unsqueeze(dim=0)  # [1, grd_H, grd_W, 3]                
+                # camera_height = utils.get_camera_height()
+                # # camera offset, shift[0]:east,Z, shift[1]:north,X
+                # height = camera_height * torch.ones_like(shift_u[:, :1])                
+                # Tbev2sat = torch.cat([shift_v, height, -shift_u], dim=-1)  # shape = [B, 3]
+                # R_bev2sat = torch.tensor([0, 0, 1, 1, 0, 0], \
+                #             dtype=torch.float32, device=dR_dtheta.device, requires_grad=True).reshape(2, 3)
+
+                # dxyz_dtheta = torch.sum(dR_dtheta[:, None, None, :, :] * xyz_bev[:, :, :, None, :], dim=-1) + \
+                #               torch.sum(-dR_dtheta * Tbev2sat[:, None, :], dim=-1)[:, None, None, :]
              
-                # Note: meter_per_pixel is shape (B) here we take only the first one!
-                # denom: (B, bev_h, bev_w, 2) (4, 128, 128, 2)
-                duv_dtheta = 1 / meter_per_pixel[0] * \
-                        torch.sum(R_bev2sat[None, None, None, :, :] * dxyz_dtheta[:, :, :, None, :], dim=-1)  
-                # (B, bev_h, bev_w, 2)  => (B, 1, bev_h, bev_w, 2) => (B, C, bev_h, bev_W)
-                duv_dtheta = torch.sum(duv_dtheta[:, None, :, :, :].expand(-1, C, -1, -1, -1), dim=-1)
-                dfeat_dpose_new[2,...] = duv_dtheta        
+                # # Note: meter_per_pixel is shape (B) here we take only the first one!
+                # # denom: (B, bev_h, bev_w, 2) (4, 128, 128, 2)
+                # duv_dtheta = 1 / meter_per_pixel[0] * \
+                #         torch.sum(R_bev2sat[None, None, None, :, :] * dxyz_dtheta[:, :, :, None, :], dim=-1)  
+                # # (B, bev_h, bev_w, 2)  => (B, 1, bev_h, bev_w, 2) => (B, C, bev_h, bev_W)
+                # duv_dtheta = torch.sum(duv_dtheta[:, None, :, :, :].expand(-1, C, -1, -1, -1), dim=-1)
+                # dfeat_dpose_new[2,...] = duv_dtheta        
 
 
                 if self.args.Optimizer == 'LM':
                     # Check devices                 
-                    shift_u_new, shift_v_new, heading_new = self.LM_update(shift_u, shift_v, heading,
-                                                            sat_feat_new,
-                                                            sat_conf_new,
-                                                            grd_feat_new,
-                                                            grd_conf_new,
-                                                            dfeat_dpose_new)  # only need to compare bottom half
+                    shift_u_new, shift_v_new, heading_new = self.LM_update_2D(shift_u, shift_v, heading, grd_feat_new, sat_feat_new, dfeat_dpose_new)
+                    # shift_u_new, shift_v_new, heading_new = self.LM_update(shift_u, shift_v, heading,
+                    #                                         sat_feat_new,
+                    #                                         sat_conf_new,
+                    #                                         grd_feat_new,
+                    #                                         grd_conf_new,
+                    #                                         dfeat_dpose_new)  # only need to compare bottom half
                     
                     print("shift_u_new = ", shift_u_new)
                     print("shift_v_new = ", shift_v_new)
                     print("heading_new = ", heading_new)
+
                 elif self.args.Optimizer == 'SGD':
                     r = sat_feat_proj[:, :, grd_H // 2:, :] - grd_feat[:, :, grd_H // 2:, :]
                     p = torch.mean(torch.abs(r), dim=[1, 2, 3])  # *100 #* 256 * 256 * 3
@@ -1353,8 +1492,8 @@ class LM_S2GP(nn.Module):
                                                                          m, v, t)
 
 
-                shift_us.append(shift_u_new[:, 0])  # [B]
-                shift_vs.append(shift_v_new[:, 0])  # [B]
+                shift_us.append(shift_u_new[:, 0] * meter_per_pixel_BEV)  # [B]
+                shift_vs.append(shift_v_new[:, 0] * meter_per_pixel_BEV)  # [B]
                 headings.append(heading_new[:, 0])  # [B]
 
                 shift_u = shift_u_new.clone()
@@ -1420,6 +1559,7 @@ class LM_S2GP(nn.Module):
                             self.args.coe_L1, self.args.coe_L2, self.args.coe_L3, self.args.coe_L4)
 
             print("loss = ", loss)
+
             with open(self.loss_file, 'a') as f:
                 f.write(f'{loss}\n')
             return loss, loss_decrease, shift_lat_decrease, shift_lon_decrease, thetas_decrease, loss_last, \

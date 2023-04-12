@@ -34,6 +34,8 @@ from models_nuscenes import LM_G2SP, loss_func, LM_S2GP
 # garbage collector
 import gc
 
+import torchviz
+
 ########################### ranking test ############################
 def localize(net_localize, args,  device, save_path, best_rank_result, epoch):
     print("Runing localization pipeline")
@@ -110,14 +112,14 @@ def test1( net_test, cfg, save_path, best_rank_result, epoch, device):
     end_time = time.time()
     duration = (end_time - start_time)/len(dataloader)
 
-    # pred_shifts = np.concatenate(pred_shifts, axis=0)
-    # pred_headings = np.concatenate(pred_headings, axis=0)
-    # gt_shifts = np.concatenate(gt_shifts, axis=0)
-    # gt_headings = np.concatenate(gt_headings, axis=0)
-    pred_shifts = np.concatenate(pred_shifts, axis=0) * np.array([args.shift_range_lat, args.shift_range_lon]).reshape(1, 2)
-    pred_headings = np.concatenate(pred_headings, axis=0) * args.rotation_range
-    gt_shifts = np.concatenate(gt_shifts, axis=0) * np.array([args.shift_range_lat, args.shift_range_lon]).reshape(1, 2)
-    gt_headings = np.concatenate(gt_headings, axis=0) * args.rotation_range
+    pred_shifts = np.concatenate(pred_shifts, axis=0)
+    pred_headings = np.concatenate(pred_headings, axis=0)
+    gt_shifts = np.concatenate(gt_shifts, axis=0)
+    gt_headings = np.concatenate(gt_headings, axis=0)
+    # pred_shifts = np.concatenate(pred_shifts, axis=0) * np.array([args.shift_range_lat, args.shift_range_lon]).reshape(1, 2)
+    # pred_headings = np.concatenate(pred_headings, axis=0) * args.rotation_range
+    # gt_shifts = np.concatenate(gt_shifts, axis=0) * np.array([args.shift_range_lat, args.shift_range_lon]).reshape(1, 2)
+    # gt_headings = np.concatenate(gt_headings, axis=0) * args.rotation_range
        
     print(f'gt_shifts.shape {gt_shifts.shape}')     # (200, 2)
     print(f'pred_shifts.shape {pred_shifts.shape}') # (800, 2)
@@ -150,8 +152,11 @@ def test1( net_test, cfg, save_path, best_rank_result, epoch, device):
     print('Init angle average: ', np.mean(init_angle))
     print('Pred angle average: ', np.mean(angle_diff))
 
+    # with open('offset.txt', 'a') as f:
+    #     f.write(f'{np.mean(init_dis)} {np.mean(distance)} {np.mean(init_angle)} {np.mean(angle_diff)}')
 
-    for idx in range(len(metrics)):
+
+    for idx in range(len(metrics)):        # Visualize network graph
         pred = np.sum(distance < metrics[idx]) / distance.shape[0] * 100
         init = np.sum(init_dis < metrics[idx]) / init_dis.shape[0] * 100
 
@@ -247,6 +252,7 @@ def test2(net_test, args, save_path, best_rank_result, epoch,  device):
             loss = torch.mean(headings - gt_heading)
         else:
             loss = torch.mean(shifts_lat - gt_shift_u)
+
         loss.backward()  # just to release graph
 
         pred_shifts.append(shifts.data.cpu().numpy())
@@ -430,8 +436,12 @@ def train(net, lr, cfg, device, save_path, model_save_path):
                 L1_loss, L2_loss, L3_loss, L4_loss, grd_conf_list = \
                     net(sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel, sample_name, mode='train',)
 
-            # print("loss = ", loss)
-            # print("loss_drcrease = ", loss_decrease)
+            # Visualize network graph
+            SAVE_NETWORK_STRUCT = False
+            if SAVE_NETWORK_STRUCT:
+                torchviz.make_dot(loss, params=dict(list(net.named_parameters()))).render("network_torchviz", format="png")
+
+
             loss.backward()
 
             optimizer.step()  # This step is responsible for updating weights

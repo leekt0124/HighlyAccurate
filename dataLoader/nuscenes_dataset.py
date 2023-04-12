@@ -613,6 +613,8 @@ class NuScenesDataset(torch.utils.data.Dataset):
         # print(sat_map_filename, idx)
         sat_rot = sat_map.rotate(-heading / np.pi * 180 + 90) # +90 is to make vehicle direction facing up
 
+        sat_rot.save(f'sat_map_origin_rot_{idx}.png')
+
         # Currently no need since both sat and bev are centered
         # sat_align_cam = sat_rot.transform(sat_rot.size, Image.AFFINE,
         #                                   (1, 0, utils.CameraGPS_shift_left[0] / meter_per_pixel,
@@ -633,6 +635,8 @@ class NuScenesDataset(torch.utils.data.Dataset):
             gt_shift_x *= 0  # --> right as positive, parallel to the heading direction
             gt_shift_y *= 0  # --> up as positive, vertical to the heading direction
             gt_theta *= 0  # --> counter-clockwise as positive
+
+        print(f"gt transform of {idx}: ", gt_shift_x, gt_shift_y, gt_theta)
 
         sat_rand_shift = \
             sat_rot.transform(
@@ -674,9 +678,9 @@ class NuScenesDataset(torch.utils.data.Dataset):
         sample_name = sample['scene'] + '-' + str(idx)
 
         return sat_map, grd_imgs, intrinsics, extrinsics, \
-               torch.tensor(-gt_shift_x).reshape(1), \
-               torch.tensor(gt_shift_y).reshape(1), \
-               torch.tensor(gt_theta, dtype=torch.float32).reshape(1), \
+               torch.tensor(gt_shift_x * self.shift_range_meters_lat).reshape(1), \
+               torch.tensor(gt_shift_y * self.shift_range_meters_lon).reshape(1), \
+               torch.tensor(gt_theta * self.rotation_range, dtype=torch.float32).reshape(1), \
                meter_per_pixel, \
                sample_name
                
