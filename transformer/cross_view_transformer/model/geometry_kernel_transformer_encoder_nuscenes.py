@@ -324,8 +324,8 @@ class IndexBEVProjector(nn.Module):
         sample_feats = images[sample_points_inds].reshape(
             b, n, k, num_grid_points, c)
         # embed()
-        print(f'sample_points_inds {sample_points_inds}')
-        print(f'sample_feats.shape {sample_feats.shape}')     
+        # print(f'sample_points_inds {sample_points_inds}')
+        # print(f'sample_feats.shape {sample_feats.shape}')     
            
         return sample_feats, sample_mask.detach()
 
@@ -523,18 +523,18 @@ class GeometryKernelAttention(nn.Module):
         feature_embed, mask = self.sampling(
             bev.grid.detach().clone(), feature_embed, I_, E_)
 
-        print(f'After IndexSampling:\nfeature_embed.shape {feature_embed.shape}\nmask.shape {mask.shape}')
+        # print(f'After IndexSampling:\nfeature_embed.shape {feature_embed.shape}\nmask.shape {mask.shape}')
         # b, n, q, num_points, c
         feature_flat = feature_embed[..., :d_feature]
         d_flat = feature_embed[..., d_feature:]
 
-        print(f'feature_flat.shape {feature_flat.shape}')
-        print(f'd_flat.shape {d_flat.shape}')
+        # print(f'feature_flat.shape {feature_flat.shape}')
+        # print(f'd_flat.shape {d_flat.shape}')
         # (b n) q, num_points, 4
         d_embed = self.img_embed(d_flat)
 
-        print(f'd_embed.shape {d_embed.shape}')
-        print(f'c_embed.shape {c_embed.shape}')
+        # print(f'd_embed.shape {d_embed.shape}')
+        # print(f'c_embed.shape {c_embed.shape}')
         # d_embed: b, n, q, num_points, d
         # c_embed: (b, n), d, 1, 1
         img_embed = d_embed - c_embed.view(b, n, 1, 1, d_embed.shape[-1])
@@ -543,8 +543,8 @@ class GeometryKernelAttention(nn.Module):
         # g: num_grid_points
         # b, n, q, g, c
         if self.feature_proj is not None:
-            print(f'img_embed.shape {img_embed.shape}')
-            print(f' self.feature_proj(feature_flat).shape { self.feature_proj(feature_flat).shape}')
+            # print(f'img_embed.shape {img_embed.shape}')
+            # print(f' self.feature_proj(feature_flat).shape { self.feature_proj(feature_flat).shape}')
             key_flat = img_embed + self.feature_proj(feature_flat)
         else:
             # (b, n) d, h, w
@@ -553,13 +553,13 @@ class GeometryKernelAttention(nn.Module):
         # (b, n) d, h, w
         val_flat = self.feature_linear(feature_flat)
 
-        print(f'key_flat.shape {key_flat.shape}')
-        print(f'val_flat.shape (bev prior) {val_flat.shape}')
+        # print(f'key_flat.shape {key_flat.shape}')
+        # print(f'val_flat.shape (bev prior) {val_flat.shape}')
 
         # Expand + refine the BEV embedding
         # b, n, d, H, W
-        print(f'query_pos.shape {query_pos.shape}')
-        print(f'x.shape (bev prior) {x.shape}')
+        # print(f'query_pos.shape {query_pos.shape}')
+        # print(f'x.shape (bev prior) {x.shape}')
         query = query_pos + x[:, None]
 
         return self.cross_attn(query, key_flat, val_flat, mask=mask, skip=x if self.skip else None)
@@ -668,6 +668,7 @@ class GeometryKernelEncoder(nn.Module):
         # feature should be shape (1, 6, 32, 56, 120)
         for cross_view, feature, layer in zip(self.cross_views, features, self.layers):
             feature = rearrange(feature, '(b n) ... -> b n ...', b=b, n=n) # 1,  6,  32,  64, 256
+                    # bev priors(c), bev_embedding_layer, phi(values), 
             x = cross_view(x, self.bev_embedding, feature, I_inv,
                            E_inv, batch['intrinsics'], batch['extrinsics'])
             x = layer(x)

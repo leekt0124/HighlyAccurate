@@ -1,7 +1,7 @@
-date: "0409"
+date: "0411"
 resume: 0
 test: 0
-localize: 0 
+localize: 1
 debug: 0 
 epochs: 1000
 # lr: 4e-3 #0.0001 (1e-4)

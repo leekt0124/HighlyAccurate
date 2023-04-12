@@ -622,11 +622,25 @@ class NuScenesDataset(torch.utils.data.Dataset):
         # the homography is defined on: from target pixel to source pixel
         # now east direction is the real vehicle heading direction
 
-        gt_shift_x = np.random.uniform(-1, 1)  # (pixels)
-        gt_shift_y = np.random.uniform(-1, 1)  # (pixels)
-        gt_theta = np.random.uniform(-1, 1) # (degrees)
+        ONLY_SHIFT_X = False
+        ONLY_SHIFT_Y = False
+        ONLY_THETA = False
 
-        ADDING_GT_TRANSFORM = True # Set this to False if you want to check unshifted dataset
+        gt_shift_x = np.random.uniform(-1, 1)  # (pixels)
+        gt_shift_y = np.random.uniform(-1, 1)  #s (pixels)
+        gt_theta = np.random.uniform(-1, 1) # (degrees)        
+
+        if ONLY_SHIFT_X:
+            gt_shift_y *= 0
+            gt_theta *= 0
+        elif ONLY_SHIFT_Y:
+            gt_shift_x *= 0
+            gt_theta *= 0
+        elif ONLY_THETA:
+            gt_shift_x *= 0
+            gt_shift_y *= 0
+
+        ADDING_GT_TRANSFORM = False # Set this to False if you want to check unshifted dataset
         if not ADDING_GT_TRANSFORM:
             # randomly generate shift
             gt_shift_x *= 0  # --> right as positive, parallel to the heading direction
@@ -662,7 +676,7 @@ class NuScenesDataset(torch.utils.data.Dataset):
         # sat_map =TF.center_crop(sat_rand_shift_rand_rot, utils.SatMap_process_sidelength)
         sat_map = sat_rand_shift_rand_rot
 
-        # transform (resize here)
+        # Only convert it to a 'torch.Tensor'
         if self.satmap_transform is not None:
             sat_map = self.satmap_transform(sat_map)
 
@@ -677,6 +691,7 @@ class NuScenesDataset(torch.utils.data.Dataset):
                torch.tensor(gt_shift_y, dtype=torch.float32).reshape(1), \
                torch.tensor(gt_theta, dtype=torch.float32).reshape(1), \
                meter_per_pixel, \
+               lat, lon, \
                sample_name
                
 
@@ -726,7 +741,7 @@ def load_val_data(data_config, GrdImg_H, GrdImg_W, version, dataset_dir, labels_
         SatMap_process_sidelength = utils.get_process_satmap_sidelength()
 
         satmap_transform = transforms.Compose([
-            transforms.Resize(size=[SatMap_process_sidelength, SatMap_process_sidelength]),
+            # transforms.Resize(size=[SatMap_process_sidelength, SatMap_process_sidelength]),
             transforms.ToTensor(),
         ])
 

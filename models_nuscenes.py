@@ -1237,7 +1237,17 @@ class LM_S2GP(nn.Module):
                     # SAVE_IMAGE = True
 
                 sat_feat = sat_feat_list[level]
+
+                # channel dimension 256, 128, 64
+                # Conv2d(sat_feat.shape(2), 3, (1,1))
+                # sat_feat.shape (1, 256, 160, 160)
+                conv_to_vis = nn.Conv2d(sat_feat.shape[1], 3, (1,1), device=sat_feat.device, dtype=sat_feat.dtype)
+                # sat_feat = conv_to_vis(sat_feat)
+                # print(f'sat_feat.shape after conv_to_viz: {sat_feat.shape}')
                 
+                # grd_feat = conv_to_vis(grd_feat)
+                # print(f'grd_feat.shape after conv_to_viz: {grd_feat.shape}')
+
                 B_sat, C_sat, H_sat, W_sat = sat_feat.shape
                 # B, C, H, W = sat_feat.shape
                 meter_per_pixel_sat_feat = meter_per_pixel[0].item() * (self.data_dict.satellite_image.h/H_sat)
@@ -1271,13 +1281,13 @@ class LM_S2GP(nn.Module):
                 # grd_feat_last_3_dim = grd_feat[timestamp_idx, -3:, :, :]
                 # save_image(grd_feat_last_3_dim, f"grd_feat_level_{level}_{sample_name[timestamp_idx]}.png")
 
-
+                # TODO: Print first 3 dimensions (or last 3 dimensions)
                 if SAVE_IMAGE:
                     # print(f'sat_feat.shape {sat_feat.shape}')
-                    sat_feat_last_3_dim = sat_feat[timestamp_idx, -3:, :, :] # (3, 128, 128)
+                    sat_feat_last_3_dim = sat_feat[timestamp_idx, :3, :, :] # (3, 128, 128)
                     save_image(sat_feat_last_3_dim, f'sat_feat_level_{level}_{sample_name[timestamp_idx]}.png')
 
-                    grd_feat_last_3_dim = grd_feat[timestamp_idx, -3:, :, :]
+                    grd_feat_last_3_dim = grd_feat[timestamp_idx, :3, :, :]
                     save_image(grd_feat_last_3_dim, f"grd_feat_level_{level}_{sample_name[timestamp_idx]}.png")
 
                 grd_H, grd_W = grd_feat.shape[-2:]

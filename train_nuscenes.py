@@ -36,28 +36,286 @@ from models_nuscenes import LM_G2SP, loss_func, LM_S2GP
 # garbage collector
 import gc
 
-########################### ranking test ############################
-def localize(net_localize, args,  device, save_path, best_rank_result, epoch):
-    print("Runing localization pipeline")
-    LOCALIZE_FILE = ""
-    net_localize.eval()
-    dataloader = load_localize_data( args.shift_range_lat, args.shift_range_lon, args.rotation_range)
-    
-    start_time = time.time()
-    for i, data in enumerate(dataloader):
-        # If batch_size is not set to one, will return a list of tensor where the first dimension of the tensors are the batch_size
-        # print("len(data) = ", len(data)) # 7
-        # print("data[0].shape = ", data[0].shape) # satmap: torch.Size([B, 3, 512, 512])
-        # print("data[1].shape = ", data[1].shape) # left_camera_k: torch.Size([B, 3, 3])
-        # print("data[2].shape = ", data[2].shape) # groudn_left_img: torch.Size([B, 3, 256, 1024])
-        sat_map, left_camera_k, grd_left_imgs = [item.to(device) for item in data]
-        print("left_cam_k = ", left_camera_k)
+
+import math
+
+
+
+MAP_ORIGINS ={
+    'boston-seaport': (42.336849169438615, -71.05785369873047),
+    'singapore-onenorth': (1.2882100868743724, 103.78475189208984),
+    'singapore-hollandvillage': (1.2993652317780957, 103.78217697143555),
+    'singapore-queenstown': (1.2782562240223188, 103.76741409301758)    
+}
+
+
+def rad2deg(radian):
+    return radian*180 / math.pi
+def deg2rad(degree):
+    return degree * math.pi/180    
+
+
+def meter2latlon(init_lat, init_lon, x, y, type="MATLAB"):
+    # print(f'    init lat: {init_lat}')
+    # print(f'    init long: {init_lon}')
+    # print(f'    x: {x}')       
+    # print(f'    y: {y}')
+
+    if type=="Sphere-Approximate":
+        #  lat = ( y /  { radius * 2*pi } ) * rad2deg
+        #  lon = x /  { 2 * pi * radius * cos(lat*(1/rad2deg)) }
+        r = 6378137 # equatorial radius
+     
+        lat = rad2deg(init_lat - (y / (r*2*math.pi))) 
+        lon = init_lon + rad2deg( (x / (r*2*math.pi*math.cos(deg2rad(lat)))) )
+        return lat, lon
+    elif type=="Yujiao":
+        r = 6378137 # equatorial radius
+        flatten = 1/298257 # flattening
+        E2 = flatten * (2- flatten)
+        m = r * np.pi/180  
+        coslat = np.cos(lat * np.pi/180)
+        w2 = 1/(1-E2 *(1-coslat*coslat))
+        w = np.sqrt(w2)
+        kx = m * w * coslat
+        ky = m * w * w2 * (1-E2)
+        lon = init_lon + x / kx 
+        lat = init_lat - y / ky
         
-        if args.direction == 'S2GP':
-            shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_left_imgs, mode='test')
-            # print("shifts_lat = ", shifts_lat, ", shifts_lon = ", shifts_lon, "theta = ", theta)
+        return lat, lon 
+
+    else: # Default
+
+        f =     1/298257 # flattening -> MATLAB ?    
+        R =     6378137 # equatorial radius
+        dNorth = y
+        dEast =  x
+        Rn = R / (math.sqrt(1 - (2*f-f*f)*math.sin(deg2rad(init_lat))*math.sin(deg2rad(init_lon)))) # Prime Vertical Radius
+        Rm = Rn * ( (1-(2*f-f*f)) / (1 - (2*f-f*f)*math.sin(deg2rad(init_lat))*math.sin(deg2rad(init_lon))) )# Meridional Radius 
+        dLat = dNorth * math.atan2(1, Rm)
+        dLon = dEast * math.atan2(1, Rn* math.cos(deg2rad(init_lat)))
+        lat = init_lat + rad2deg(dLat)
+        lon = init_lon + rad2deg(dLon)
+        return lat, lon 
+
+
+########################### ranking test ############################
+# def localize(net_localize, args,  device, save_path, best_rank_result, epoch):
+
+def localize( net_localize, cfg, save_path, best_rank_result, epoch, device):
+    args = cfg.highlyaccurate
+    ### net evaluation state
+    net_localize.eval()
+    # dataloader = load_val_data(cfg.data, args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir, args.loader, \
+                            #    args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir, args.zoom_level)
+    dataloader = load_train_data(cfg.data, args.GrdImg_H, args.GrdImg_W, args.version, args.dataset_dir, args.labels_dir, args.loader, \
+                               args.shift_range_lat, args.shift_range_lon, args.rotation_range, args.root_dir, args.zoom_level)    
+    pred_shifts = []
+    pred_headings = []
+    gt_shifts = []
+    gt_headings = []
+    
+    pred_lats=[]
+    pred_lons=[]
+    gt_lats = []
+    gt_lons = []
+
+    start_time = time.time()
+    print("------- Localizing on scene-0061  ==----------")
+
+    origin = MAP_ORIGINS['singapore-onenorth']
+
+    # Batch size 1, iterate for 40 loop
+    for i, data in enumerate(dataloader, 0):
+
+        if i >= 40:
+            # import sys
+            # sys.exit()
+            print(f' Done epoch {epoch}')
+            break
+
+        sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel, lat, lon = [item.to(device) for item in data[:-1]]
+        sample_name = data[-1]
+        # print(f'sample_name: {sample_name}')
+
+        if args.direction == 'S2GP':   
+            shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_imgs, intrinsics, extrinsics, 0, 0, 0, meter_per_pixel, sample_name, mode='test')
+            # shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_imgs, intrinsics, extrinsics,  meter_per_pixel, mode='test')     
+            # shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_imgs, mode='test')
         elif args.direction == 'G2SP':
-            shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_left_imgs, left_camera_k, mode='test')
+            shifts_lat, shifts_lon, theta = net_localize(sat_map, grd_imgs, intrinsics, meter_per_pixel, mode='test')
+
+        shifts = torch.stack([shifts_lat, shifts_lon], dim=-1)
+        headings = theta.unsqueeze(dim=-1)
+        gt_shift = torch.cat([gt_shift_v, gt_shift_u], dim=-1)  # [B, 2]
+
+        # Accumulate [shifts_lat, shift_lon]
+        
+
+        if args.shift_range_lat==0 and args.shift_range_lon==0:
+            loss = torch.mean(headings - gt_heading)
+        else:
+            loss = torch.mean(shifts_lat - gt_shift_u)
+        loss.backward()  # just to release graph
+
+        pred_shifts.append(shifts.data.cpu().numpy())
+        pred_headings.append(headings.data.cpu().numpy())
+        gt_shifts.append(gt_shift.data.cpu().numpy())
+        gt_headings.append(gt_heading.data.cpu().numpy())        
+
+        # print(f'pred shifts {shifts.data.cpu().numpy()}')
+        x = shifts.data.cpu().numpy()[0,0] * meter_per_pixel
+        y = shifts.data.cpu().numpy()[0,1] * meter_per_pixel
+        pred_lat, pred_lon = meter2latlon(origin[0], origin[1], x, y)
+        pred_lats.append(pred_lat.data.cpu().numpy())
+        pred_lons.append(pred_lon.data.cpu().numpy())
+
+        print(f'pred lat,lon: {pred_lat[0]},{pred_lon[0]}  gt lat,lon:  {lat[0]},{lon[0]}')
+        gt_lats.append(lat.data.cpu().numpy())
+        gt_lons.append(lon.data.cpu().numpy())    
+
+    # pred_shifts = torch.FloatTensor(pred_shifts)
+    # gt_shifts = torch.FloatTensor(gt_shifts)
+
+
+
+    # plt.figure(2)
+    # plt.scatter(lonlons)
+    # plt.xlabel('longitude values')
+    # plt.ylabel('latitude values')
+    # plt.title('lats/lons values')
+    # plt.legend(['ego_poses'])
+    # plt.axis('square')
+    # # save the figure
+    # plt.savefig( os.path.join(TRAJ_IMG_PATH+'ego_poses(latlon)-' + scene_name + '.png'), dpi=300, bbox_inches='tight')
+    # plt.clf()    
+
+
+    end_time = time.time()
+    duration = (end_time - start_time)/len(dataloader)
+
+    pred_shifts = np.concatenate(pred_shifts, axis=0) * np.array([args.shift_range_lat, args.shift_range_lon]).reshape(1, 2)
+    pred_headings = np.concatenate(pred_headings, axis=0) * args.rotation_range
+    gt_shifts = np.concatenate(gt_shifts, axis=0) * np.array([args.shift_range_lat, args.shift_range_lon]).reshape(1, 2)
+    gt_headings = np.concatenate(gt_headings, axis=0) * args.rotation_range
+       
+
+    pred_lats = np.asarray(pred_lats)
+    pred_lons = np.asarray(pred_lons)
+    gt_lats = np.concatenate(gt_lats, axis=0) 
+    gt_lons = np.concatenate(gt_lons, axis=0)
+
+    # plot (pred_lat/lon vs gt_lat/lon)
+    # Plot the 2D trajectories for this scene
+    plt.figure(1)
+    # plt.plot(pred_shifts[:,1], pred_shifts[:,0])
+    plt.plot(pred_lats, pred_lons)
+    plt.plot(gt_lats, gt_lons)
+    plt.xlabel('lon')
+    plt.ylabel('lat')
+    plt.title('Predicted v.s. Ground Truth Shifts lat/lon')
+    # plt.legend(['pred'])
+    plt.legend(['pred', 'ground truth'])
+    plt.axis('square')
+    # save the figure
+    plt.savefig( os.path.join(Path.cwd(), 'localized-trajectory.png'), dpi=300, bbox_inches='tight')
+    plt.clf()
+
+
+    # print(f'gt_shifts.shape {gt_shifts.shape}')     # (200, 2)
+    # print(f'pred_shifts.shape {pred_shifts.shape}') # (800, 2)
+
+    scio.savemat(os.path.join(save_path, 'Test1_results.mat'), {'gt_shifts': gt_shifts, 'gt_headings': gt_headings,
+                                                         'pred_shifts': pred_shifts, 'pred_headings': pred_headings})
+
+    distance = np.sqrt(np.sum((pred_shifts - gt_shifts) ** 2, axis=1))  # [N]
+    angle_diff = np.remainder(np.abs(pred_headings - gt_headings), 360)
+    idx0 = angle_diff > 180
+    angle_diff[idx0] = 360 - angle_diff[idx0]
+    # angle_diff = angle_diff.numpy()
+
+    init_dis = np.sqrt(np.sum(gt_shifts ** 2, axis=1))
+    init_angle = np.abs(gt_headings)
+
+    metrics = [1, 3, 5]
+    angles = [1, 3, 5]
+
+    f = open(os.path.join(save_path, 'Test1_results.txt'), 'a')
+    f.write('====================================\n')
+    f.write('       EPOCH: ' + str(epoch) + '\n')
+    f.write('Time per image (second): ' + str(duration) + '\n')
+    print('====================================')
+    print('       EPOCH: ' + str(epoch))
+    print('Time per image (second): ' + str(duration) + '\n')
+    print('Validation results:')
+    print('Init distance average: ', np.mean(init_dis))
+    print('Pred distance average: ', np.mean(distance))
+    print('Init angle average: ', np.mean(init_angle))
+    print('Pred angle average: ', np.mean(angle_diff))
+
+
+    for idx in range(len(metrics)):
+        pred = np.sum(distance < metrics[idx]) / distance.shape[0] * 100
+        init = np.sum(init_dis < metrics[idx]) / init_dis.shape[0] * 100
+
+        line = 'distance within ' + str(metrics[idx]) + ' meters (pred, init): ' + str(pred) + ' ' + str(init)
+        print(line)
+        f.write(line + '\n')
+
+    print('-------------------------')
+    f.write('------------------------\n')
+
+    diff_shifts = np.abs(pred_shifts - gt_shifts)
+    for idx in range(len(metrics)):
+        pred = np.sum(diff_shifts[:, 0] < metrics[idx]) / diff_shifts.shape[0] * 100
+        init = np.sum(np.abs(gt_shifts[:, 0]) < metrics[idx]) / init_dis.shape[0] * 100
+
+        line = 'lateral      within ' + str(metrics[idx]) + ' meters (pred, init): ' + str(pred) + ' ' + str(init)
+        print(line)
+        f.write(line + '\n')
+
+        pred = np.sum(diff_shifts[:, 1] < metrics[idx]) / diff_shifts.shape[0] * 100
+        init = np.sum(np.abs(gt_shifts[:, 1]) < metrics[idx]) / diff_shifts.shape[0] * 100
+
+        line = 'longitudinal within ' + str(metrics[idx]) + ' meters (pred, init): ' + str(pred) + ' ' + str(init)
+        print(line)
+        f.write(line + '\n')
+
+    print('-------------------------')
+    f.write('------------------------\n')
+
+    for idx in range(len(angles)):
+        pred = np.sum(angle_diff < angles[idx]) / angle_diff.shape[0] * 100
+        init = np.sum(init_angle < angles[idx]) / angle_diff.shape[0] * 100
+        line = 'angle within ' + str(angles[idx]) + ' degrees (pred, init): ' + str(pred) + ' ' + str(init)
+        print(line)
+        f.write(line + '\n')
+
+    print('-------------------------')
+    f.write('------------------------\n')
+
+    for idx in range(len(angles)):
+        pred = np.sum((angle_diff[:, 0] < angles[idx]) & (diff_shifts[:, 0] < metrics[idx])) / angle_diff.shape[0] * 100
+        init = np.sum((init_angle[:, 0] < angles[idx]) & (np.abs(gt_shifts[:, 0]) < metrics[idx])) / angle_diff.shape[0] * 100
+        line = 'lat within ' + str(metrics[idx]) + ' & angle within ' + str(angles[idx]) + \
+               ' (pred, init): ' + str(pred) + ' ' + str(init)
+        print(line)
+        f.write(line + '\n')
+
+    print('====================================')
+    f.write('====================================\n')
+    f.close()
+    result = np.sum((distance < metrics[0]) & (angle_diff < angles[0])) / distance.shape[0] * 100
+
+    net_localize.train()
+
+    ### save the best params
+    if (result > best_rank_result):
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        torch.save(net_localize.state_dict(), os.path.join(save_path, 'Model_best.pth'))
+
+    return result #, ave_ratio, angle_diff_ratio
 
 
 def test1( net_test, cfg, save_path, best_rank_result, epoch, device):
@@ -83,7 +341,7 @@ def test1( net_test, cfg, save_path, best_rank_result, epoch, device):
             print(f' Done epoch {epoch}')
             break
 
-        sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel = [item.to(device) for item in data[:-1]]
+        sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel, lat, lon = [item.to(device) for item in data[:-1]]
         sample_name = data[-1]
         # print(f'sample_name: {sample_name}')
 
@@ -214,8 +472,9 @@ def test1( net_test, cfg, save_path, best_rank_result, epoch, device):
         torch.save(net_test.state_dict(), os.path.join(save_path, 'Model_best.pth'))
 
     ave_ratio =  np.mean(distance)/np.mean(init_dis) 
+    angle_diff_ratio = np.mean(angle_diff) / np.mean(init_angle)
 
-    return result, ave_ratio
+    return result, ave_ratio, angle_diff_ratio
 
 
 def test2(net_test, args, save_path, best_rank_result, epoch,  device):
@@ -375,6 +634,7 @@ def train(net, lr, cfg, device, save_path, model_save_path):
 
     ave_ratios = []
     epochs = []
+    angle_diff_ratios = []
 
     for epoch in range(args.resume, args.epochs):
         print(f'\n-------- Epoch {epoch}----------')
@@ -420,7 +680,7 @@ def train(net, lr, cfg, device, save_path, model_save_path):
 
             # print(f'device: {device}')
             # get the inputs
-            sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel = [item.to(device) for item in Data[:-1]]
+            sat_map, grd_imgs, intrinsics, extrinsics, gt_shift_u, gt_shift_v, gt_heading, meter_per_pixel, lat, lon = [item.to(device) for item in Data[:-1]]
             # gt_shift_u.shape: (1, 1) (batch_size, )
             sample_name = Data[-1]
             # print(f'sample_name: {sample_name}')
@@ -546,16 +806,28 @@ def train(net, lr, cfg, device, save_path, model_save_path):
         # torch.save(net.state_dict(), os.path.join(save_path, 'model_' + str(compNum) + '.pth'))
 
         ### ranking test        
-        current, ave_ratio = test1(net, cfg, save_path, bestRankResult, epoch, device)
+        current, ave_ratio, angle_diff_ratio = test1(net, cfg, save_path, bestRankResult, epoch, device)
         if (current > bestRankResult):
             bestRankResult = current
 
         # Append (ave_ratio) for epoch #
         ave_ratios.append(ave_ratio)
         epochs.append(epoch)
+        angle_diff_ratios.append(angle_diff_ratio)
+
         ratio_txt_file = os.path.join(Path.cwd(), 'distance_ratio.txt')
         with open(ratio_txt_file, 'a') as f:
                         f.write(f'{ave_ratio}\n') 
+
+        angle_diff_ratio_txt_file = os.path.join(Path.cwd(), 'angle_ratio.txt')
+        with open(angle_diff_ratio_txt_file, 'a') as f:
+                        f.write(f'{angle_diff_ratio}\n') 
+
+
+        loss_txt_file = os.path.join(Path.cwd(), 'loss.txt')
+        with open(loss_txt_file, 'a') as f:
+                        f.write(f'{loss.item()}\n')  
+
 
         # test2(net, args, save_path, bestRankResult, epoch, device)
     
@@ -665,8 +937,14 @@ def main(cfg):
     ###########################
 
     if cfg.highlyaccurate.localize:
-        net.load_state_dict(torch.load(os.path.join(save_path, 'Model_best.pth')))
-        localize(net, cfg.highlyaccurate, device, save_path, 0., epoch=0)
+        # net.load_state_dict(torch.load(os.path.join(save_path, 'Model_best.pth')))
+        print("\n======= Start localization process... ===========")
+        localization_model_path =  "/home/goroyeh/Yujiao/leekt/HighlyAccurate/ModelsNuscenes/model_0410|15|59v1.0-mini_epoch1000_batch1_lr0.0001_epoch999.pth"    
+        net.load_state_dict(torch.load(localization_model_path))
+        localize(net, cfg, save_path, 0, epoch=0, device=device)
+
+        print("\n======= Done localization process... ===========")
+        # localize(net, cfg.highlyaccurate, device, save_path, 0., epoch=0)
     else:
         if cfg.highlyaccurate.test:
             # net.load_state_dict(torch.load(os.path.join(save_path, 'Model_best.pth')))
